@@ -85,7 +85,7 @@ for remote in $remotes; do
     {
       \"path\": \"$file_real\",
       \"url\": \"${repos[$repo]}/$file_real\",
-      \"sha1\": \"$(cat $file_real.sha1)\"
+      \"sha1\": \"$(cut -d\  -f1 $file_real.sha1)\"
     }"
     sep=,
   done

@@ -54,7 +54,7 @@ in
   '';
 
   mvnix = writeScriptBin "mvnix" (''
-      set -ex
+      set -e
 
       TMP_REPO="$PWD/.m2_repository"
       mkdir -p "$TMP_REPO"
