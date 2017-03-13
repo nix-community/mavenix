@@ -1,6 +1,6 @@
 {
   stdenv, maven, runCommand, writeText, writeScript, writeScriptBin, fetchurl,
-  lib, requireFile, unzip
+  makeWrapper, lib, requireFile, unzip
 }:
 
 let
@@ -53,6 +53,13 @@ in
     #chmod -R +w $TMP_REPO
   '';
 
+  # TODO: maybe use:
+  mvn-online = runCommand "mvn" { buildInputs = [ makeWrapper ]; } ''
+    makeWrapper ${maven}/bin/mvn $out/bin/mvn \
+      --add-flags "--settings ${settings}" \
+      --add-flags "-nsu"
+  '';
+
   mvnix = writeScriptBin "mvnix" (''
       set -e
 
@@ -60,7 +67,6 @@ in
       mkdir -p "$TMP_REPO"
       #chmod -R +w "$TMP_REPO"
       MAVEN_OPTS="${opts}"
-      settings="${settings}"
 
       cleanup() {
         rm -rf "$TMP_REPO"
@@ -70,7 +76,7 @@ in
 
       cleanup
 
-      export PATH=${maven}/bin:$PATH
+      export PATH=${mvn-online}/bin:$PATH
       (
     ''
     + (builtins.readFile ./drvbuilder.sh)
@@ -116,25 +122,24 @@ in (infoFile:
     '');
 
     repo = runCommand "maven-repository" {
-      buildInputs = [ maven unzip ] ++ buildInputs;
+      buildInputs = [ unzip ] ++ buildInputs;
     } ''
       mkdir -p "$out"
       TMP_REPO="$out" MAVEN_OPTS="${opts}" bash ${script}
     '';
 
-    # TODO: maybe use:
-    #runCommand "mvn" { buildInputs = [ makeWrapper ]; } ''
-    #  makeWrapper ${maven}/bin/mvn $out/bin/mvn --settings ${settings} -Dmaven.repo.local=${repo}
-    #''
-    mvn-offline = writeScriptBin "mvn" ''
-      #!${stdenv.shell}
-      exec ${maven}/bin/mvn --offline --settings ${settings} -Dmaven.repo.local=${repo} $*
+    mvn-offline = runCommand "mvn" { buildInputs = [ makeWrapper ]; } ''
+      makeWrapper ${maven}/bin/mvn $out/bin/mvn \
+        --add-flags "--offline" \
+        --add-flags "--settings ${settings}" \
+        --add-flags "-Dmaven.repo.local=${repo}"
     '';
   in stdenv.mkDerivation {
     name = builtins.trace "The name of this project is ${info.name}" info.name;
     src = filterSrc src;
 
     MAVEN_OPTS = opts;
+    LC_ALL = "en_US.UTF-8";
 
     buildInputs = [ mvn-offline mvnix ] ++ buildInputs;
 
@@ -149,7 +154,7 @@ in (infoFile:
     buildPhase = ''
       runHook preBuild
 
-      mvn --version
+      mvn -version
       mvn -nsu package
 
       runHook postBuild

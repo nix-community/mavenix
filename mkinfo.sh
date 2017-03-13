@@ -17,8 +17,8 @@ cp -r "${TMP_REPO}" "${TMP_REPO}__"
 #cat `which mvn` >&2
 export PATH=${maven}/bin:$PATH
 
-proj="$(mvn -q -nsu --non-recursive \
-  --settings $settings -Dmaven.repo.local=${TMP_REPO}__ \
+proj="$(mvn -q --non-recursive \
+  -Dmaven.repo.local=${TMP_REPO}__ \
   org.codehaus.mojo:exec-maven-plugin:1.3.1:exec \
   -Dexec.executable="echo" -Dexec.args='${project.groupId} ${project.artifactId} ${project.version}')"
 groupId="$(cut -d' ' -f1 <<<"$proj")"
@@ -27,21 +27,21 @@ version="$(cut -d' ' -f3 <<<"$proj")"
 rm -fr "${TMP_REPO}__"
 
 echo >&2 "RUNING MAVEN INSTALL" >&2
-mvn >&2 -nsu install --settings $settings -Dmaven.repo.local=${TMP_REPO} || echo -n
+mvn >&2 install -Dmaven.repo.local=${TMP_REPO} || echo -n
 
 echo >&2 "RESOLVING MAVEN DEPENDENCIES"
 # Maven 3.3.9
-mvn >&2 -nsu dependency:go-offline --settings $settings -Dmaven.repo.local=${TMP_REPO}
+mvn >&2 dependency:go-offline -Dmaven.repo.local=${TMP_REPO}
 # Maven 3.0.5
-#mvn >&2 -nsu org.apache.maven.plugins:maven-dependency-plugin:2.6:go-offline --settings $settings -Dmaven.repo.local=${TMP_REPO}
+#mvn >&2 org.apache.maven.plugins:maven-dependency-plugin:2.6:go-offline -Dmaven.repo.local=${TMP_REPO}
 
 echo >&2 "RESOLVING MAVEN REPOSITORIES"
 # Maven 3.3.9
-set_repos $(mvn -o -nsu \
-  dependency:list-repositories --settings $settings -Dmaven.repo.local=${TMP_REPO} 2>&- \
+set_repos $(mvn -o \
+  dependency:list-repositories -Dmaven.repo.local=${TMP_REPO} 2>&- \
   | grep -Eo '(id: |url: ).*$' | sed 's|[^ ]*||')
 # Maven 3.0.5
-#set_repos $(mvn -o -nsu \
+#set_repos $(mvn -o \
 #   org.apache.maven.plugins:maven-dependency-plugin:2.6:list-repositories \
 #   --settings $settings -Dmaven.repo.local=${TMP_REPO} 2>&1 \
 #  | grep -Eo '(id: |url: ).*$' | sed 's|[^ ]*||')
