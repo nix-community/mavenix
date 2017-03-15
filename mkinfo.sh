@@ -7,31 +7,38 @@ set_repos() {
   done
 }
 
-mkdir -p "${TMP_REPO}"
+echo >&2 "RUNING MAVEN INSTALL" >&2
+mvn >&2 install -B -Dmaven.repo.local=${TMP_REPO} #|| echo -n
 
 echo >&2 "GETTING PROJECT INFO"
-cp -r "${TMP_REPO}" "${TMP_REPO}__"
+#cp -r "${TMP_REPO}" "${TMP_REPO}.exec"
 
-#DEBUG
-#which mvn >&2
-#cat `which mvn` >&2
-export PATH=${maven}/bin:$PATH
-
+# XXX the maven-exec plugin will be put in the generated repo which might be
+# unwanted.
 proj="$(mvn -q --non-recursive \
-  -Dmaven.repo.local=${TMP_REPO}__ \
+  -Dmaven.repo.local=${TMP_REPO} \
   org.codehaus.mojo:exec-maven-plugin:1.3.1:exec \
   -Dexec.executable="echo" -Dexec.args='${project.groupId} ${project.artifactId} ${project.version}')"
 groupId="$(cut -d' ' -f1 <<<"$proj")"
 artifactId="$(cut -d' ' -f2 <<<"$proj")"
 version="$(cut -d' ' -f3 <<<"$proj")"
-rm -fr "${TMP_REPO}__"
 
-echo >&2 "RUNING MAVEN INSTALL" >&2
-mvn >&2 install -Dmaven.repo.local=${TMP_REPO} || echo -n
+submodules="$(mvn -q \
+  -Dmaven.repo.local=${TMP_REPO} \
+  org.codehaus.mojo:exec-maven-plugin:1.3.1:exec \
+  -Dexec.executable="echo" \
+  -Dexec.args='-n ,\\n
+    \\s{\\n
+    \\s\\s\\qname\\q: \\q${project.artifactId}-${project.version}\\q,\\n
+    \\s\\s\\qgroupId\\q: \\q${project.groupId}\\q,\\n
+    \\s\\s\\qartifactId\\q: \\q${project.artifactId}\\q,\\n
+    \\s\\s\\qversion\\q: \\q${project.version}\\q,\\n
+    \\s\\s\\qpath\\q: \\q${basedir}\\q\\n
+    \\s}')"
 
 echo >&2 "RESOLVING MAVEN DEPENDENCIES"
 # Maven 3.3.9
-mvn >&2 dependency:go-offline -Dmaven.repo.local=${TMP_REPO}
+mvn >&2 dependency:go-offline -B -Dmaven.repo.local=${TMP_REPO}
 # Maven 3.0.5
 #mvn >&2 org.apache.maven.plugins:maven-dependency-plugin:2.6:go-offline -Dmaven.repo.local=${TMP_REPO}
 
@@ -47,29 +54,21 @@ set_repos $(mvn -o \
 #  | grep -Eo '(id: |url: ).*$' | sed 's|[^ ]*||')
 
 echo >&2 "CREATING OUTPUT"
-( cd $TMP_REPO
-
-metafiles="$(find . -type f -name "maven-metadata-*.xml"  | sed 's|^\./||' | sort)"
-remotes="$(find . -type f -name "*.repositories" | sed 's|^\./||' | sort)"
-
 echo -n "{
   \"name\": \"$artifactId-$version\",
   \"groupId\": \"$groupId\",
   \"artifactId\": \"$artifactId\",
   \"version\": \"$version\",
+  \"submodules\": ["
+
+echo -n $submodules \
+  | sed 's/,//;s|\\\\q'$PWD'|".|g;s/\\\\s/  /g;s/\\\\n/\n /g;s/\\\\q/"/g'
+echo -n  "
+  ],
+
   \"deps\": ["
-# XXX: is this needed?
-#for file in $metafiles; do
-#  repo=$(basename $file | sed 's/^maven-metadata-//;s/\.xml$/=/')
-#  test "${repos[$repo]}" || continue
-#  echo -n "$sep
-#    {
-#      \"path\": \"$file\",
-#      \"url\": \"${repos[$repo]}/$(dirname $file)/maven-metadata.xml\",
-#      \"sha1\": \"$(cat $file.sha1)\"
-#    }"
-#  sep=,
-#done
+( cd $TMP_REPO
+remotes="$(find . -type f -name "*.repositories" | sed 's|^\./||' | sort)"
 for remote in $remotes; do
   dir="$(dirname "$remote")"
   #test $(find "$dir" -type f -name "*.jar" | wc -l) -gt 1 && continue
@@ -85,12 +84,26 @@ for remote in $remotes; do
     {
       \"path\": \"$file_real\",
       \"url\": \"${repos[$repo]}/$file_real\",
-      \"sha1\": \"$(cut -d\  -f1 $file_real.sha1)\"
+      \"sha1\": \"$(grep -Eo '[0-9a-zA-Z]{40}' < $file_real.sha1)\"
     }"
     sep=,
   done
 done
-echo ']
-}'
 
+# XXX: is this needed? Yes, for transitive deps
+metafiles="$(find . -type f -name "maven-metadata-*.xml"  | sed 's|^\./||' | sort)"
+for file in $metafiles; do
+  repo=$(basename $file | sed 's/^maven-metadata-//;s/\.xml$/=/')
+  test "${repos[$repo]}" || continue
+  echo -n ",
+    {
+      \"path\": \"$file\",
+      \"url\": \"${repos[$repo]}/$(dirname $file)/maven-metadata.xml\",
+      \"sha1\": \"$(sha1sum $file | grep -Eo '[0-9a-zA-Z]{40}')\"
+    }"
+done
 )
+echo -n "
+  ]
+}
+"

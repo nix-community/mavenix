@@ -1,6 +1,6 @@
 {
   stdenv, maven, runCommand, writeText, writeScript, writeScriptBin, fetchurl,
-  makeWrapper, lib, requireFile, unzip
+  makeWrapper, lib, requireFile, unzip, mktemp
 }:
 
 let
@@ -20,12 +20,17 @@ let
   filterSrc = src: builtins.filterSource (path: type:
     let
       p = toString path;
-      p2s = pathToString src;
-      isResult = lib.hasPrefix (p2s "result") p;
-      check = (!isResult) &&
-        (! builtins.elem p (map p2s [ "target" ".git" ]));
+      #p2s = pathToString src;
+      isResult = type == "symlink" && lib.hasPrefix "result" (builtins.baseNameOf p);
+      isIgnore = type == "directory" && builtins.elem (builtins.baseNameOf p) [ "target" ".git" ];
+      check = ! (isResult || isIgnore);
     in check
   ) src;
+
+  jsonFile = file: builtins.fromJSON (builtins.readFile file);
+
+  mapmap = fs: map (v: map (f: f v) fs);
+  #flatmapmap = builtins.concatLists mapmap
 
   #maven-old = maven.overrideDerivation (_: rec {
   #  version = "3.0.5";
@@ -35,6 +40,34 @@ let
   #    sha256 = "1nbx6pmdgzv51p4nd4d3h8mm1rka8vyiwm0x1j924hi5x5mpd3fr";
   #  };
   #});
+
+  urlToScript = (dep: let
+    inherit (dep) path url sha1;
+
+    authenticated = false;
+
+    fetch = (if authenticated then requireFile else fetchurl) {
+      inherit url sha1;
+    };
+  # XXX: What does this do?
+  in ''
+    dir="$out/$(dirname ${path})"
+    dest="$dir/${baseNameOf path}"
+    mkdir -p "$dir"
+    ln -fv "${fetch}" "$dest"
+    linkSnapshot "$dest"
+  '');
+
+  drvToScript = drv: ''
+    echo >&2 BUILDING FROM DERIVATION
+
+    props="${drv}/share/java/*.properties"
+    for prop in $props; do getMavenPathFromProperties $prop; done
+  '';
+
+  transDeps = drvs: builtins.concatLists (
+    map (drv: (jsonFile "${drv}/share/java/info.json").deps) drvs
+  );
 in
 
 { src
@@ -43,17 +76,22 @@ in
 , opts        ? ""
 , buildInputs ? []
 }: let
-  drvToScript = drv: ''
-    echo >&2 BUILDING FROM DERIVATION
 
-    jars="$(find ${drv}/share/java -type f -path "${drv}/share/java/*.jar" ! -name "*-sources.jar")"
+  mkRepo = drvs: deps: runCommand "mk-repo" {
+    buildInputs = [ unzip ] ++ buildInputs;
+  } ''
+    set -e
+    mkdir -p "$out"
+    TMP_REPO="$out"
 
-    getMavenPathFromProp "${drv}/share/java"
-    for jar in $jars; do getMavenPathFromJar $jar; done
-    #chmod -R +w $TMP_REPO
+    ${builtins.readFile ./drvbuilder.sh}
+
+    ${lib.concatStrings (map urlToScript (deps ++ (transDeps drvs)))}
+    ${lib.concatStrings (map drvToScript drvs)}
   '';
 
-  # TODO: maybe use:
+  initRepo = mkRepo drvs [];
+
   mvn-online = runCommand "mvn" { buildInputs = [ makeWrapper ]; } ''
     makeWrapper ${maven}/bin/mvn $out/bin/mvn \
       --add-flags "--settings ${settings}" \
@@ -62,30 +100,21 @@ in
 
   mvnix = writeScriptBin "mvnix" (''
       set -e
-
-      TMP_REPO="$PWD/.m2_repository"
-      mkdir -p "$TMP_REPO"
-      #chmod -R +w "$TMP_REPO"
-      MAVEN_OPTS="${opts}"
-
-      cleanup() {
-        rm -rf "$TMP_REPO"
-      }
-
-      trap "trap - TERM; cleanup; kill -- $$" EXIT INT TERM
-
-      cleanup
+      MAVEN_OPTS="$MAVEN_OPTS ${opts}"
 
       export PATH=${mvn-online}/bin:$PATH
-      (
-    ''
-    + (builtins.readFile ./drvbuilder.sh)
-    + ''
-      ${lib.concatStrings (map drvToScript drvs)}
-      test -d "$TMP_REPO" && chmod -R +w "$TMP_REPO" || echo >&2 Failed to set chmod on temp repo dir.
-      ) >&2
-    ''
-    + (builtins.readFile ./mkinfo.sh)
+      export PATH=${mktemp}/bin:$PATH
+
+      TMP_REPO="$(mktemp -d --tmpdir mavenix-m2-repo.XXXXXX)"
+
+      cleanup() {
+        rm -rf "$TMP_REPO" || echo -n
+      }
+      trap "trap - TERM; cleanup; kill -- $$" EXIT INT TERM
+
+      cp -rf ${initRepo}/* $TMP_REPO || echo -n
+      chmod -R +w "$TMP_REPO" || echo >&2 Failed to set chmod on temp repo dir.
+    '' + (builtins.readFile ./mkinfo.sh)
   );
 in (infoFile:
  let
@@ -97,43 +126,49 @@ in (infoFile:
         artifactId = "undefined";
         groupId = "undefined";
         version = "undefined";
+        submodules = [];
       };
 
-    urlToScript = (dep: let
-      inherit (dep) path url sha1;
+    repo = mkRepo drvs info.deps;
 
-      authenticated = false;
-
-      fetch = (if authenticated then requireFile else fetchurl) {
-        inherit url sha1;
-      };
-    in ''
-      dir="$out/$(dirname ${path})"
-      dest="$dir/${baseNameOf path}"
-      mkdir -p "$dir"
-      ln -sv "${fetch}" "$dest"
-      linkSnapshot "$dest"
-    '');
-
-    script = writeText "build-maven-repository.sh" (
-    (builtins.readFile ./drvbuilder.sh) + ''
-      ${lib.concatStrings
-        ((map urlToScript info.deps) ++ (map drvToScript drvs))}
-    '');
-
-    repo = runCommand "maven-repository" {
-      buildInputs = [ unzip ] ++ buildInputs;
-    } ''
-      mkdir -p "$out"
-      TMP_REPO="$out" MAVEN_OPTS="${opts}" bash ${script}
+    cp-artifact = submod: ''
+      find . -type f \
+        -regex "${submod.path}/target/[^/]*\.\(jar\|war\)$" ! -name "*-sources.jar" \
+        -exec cp -v {} $dir \;
     '';
 
-    mvn-offline = runCommand "mvn" { buildInputs = [ makeWrapper ]; } ''
-      makeWrapper ${maven}/bin/mvn $out/bin/mvn \
+    cp-pom = submod: ''
+      cp -v ${submod.path}/pom.xml $dir/${submod.name}.pom
+    '';
+
+    mk-properties = submod: ''
+      echo '# Generated with MaveNix
+      groupId=${submod.groupId}
+      artifactId=${submod.artifactId}
+      version=${submod.version}
+      ' > $dir/${submod.name}.properties
+    '';
+
+    mk-maven-metadata = submod: ''
+      echo '<!-- Generated with MaveNix -->
+      <groupId>${submod.groupId}</groupId>
+        <artifactId>${submod.artifactId}</artifactId>
+        <versioning>
+          <versions>
+            <version>${submod.version}</version>
+          </versions>
+        </versioning>
+      </metadata>
+      ' > $dir/${submod.name}.metadata.xml
+    '';
+
+    mvn-offline = runCommand "mvn-offline" { buildInputs = [ makeWrapper ]; } ''
+      makeWrapper ${maven}/bin/mvn $out/bin/mvn-offline \
         --add-flags "--offline" \
         --add-flags "--settings ${settings}" \
         --add-flags "-Dmaven.repo.local=${repo}"
     '';
+
   in stdenv.mkDerivation {
     name = builtins.trace "The name of this project is ${info.name}" info.name;
     src = filterSrc src;
@@ -143,19 +178,13 @@ in (infoFile:
 
     buildInputs = [ mvn-offline mvnix ] ++ buildInputs;
 
-    #shellHook = ''
-    #  mkdir -p .m2
-    #  ln -fs "${settings}" "$PWD/.m2/settings.xml"
-    #  ln -fs "${repo}" "$PWD/.m2/repository"
-    #  export MAVEN_OPTS+=" -Duser.home=$PWD"' ${opts}'
-    #'';
     phases = "unpackPhase buildPhase installPhase";
 
     buildPhase = ''
       runHook preBuild
 
-      mvn -version
-      mvn -nsu package
+      mvn-offline -version
+      mvn-offline -nsu package
 
       runHook postBuild
     '';
@@ -166,17 +195,11 @@ in (infoFile:
       dir="$out/share/java"
       mkdir -p $dir
 
-      find . -type f \
-        -regex ".*/target/[^/]*\.\(jar\|war\)$" ! -name "*-sources.jar" \
-        -exec cp -v {} $dir \;
+      cp ${if builtins.pathExists infoFile then infoFile else ""} $dir/info.json
 
-      cp -v pom.xml $dir/pom.xml
-
-      echo '# Generated with MaveNix
-      groupId=${info.groupId}
-      artifactId=${info.artifactId}
-      version=${info.version}
-      ' > $dir/pom.properties
+      ${lib.concatStrings (builtins.concatLists (
+        mapmap [ cp-artifact cp-pom mk-properties mk-maven-metadata ] info.submodules
+      ))}
 
       runHook postInstall
     '';
