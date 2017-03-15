@@ -8,14 +8,14 @@ set_repos() {
 }
 
 echo >&2 "RUNING MAVEN INSTALL" >&2
-mvn >&2 install -B -Dmaven.repo.local=${TMP_REPO} #|| echo -n
+mvn_ >&2 install -B -Dmaven.repo.local=${TMP_REPO} #|| echo -n
 
 echo >&2 "GETTING PROJECT INFO"
 #cp -r "${TMP_REPO}" "${TMP_REPO}.exec"
 
 # XXX the maven-exec plugin will be put in the generated repo which might be
 # unwanted.
-proj="$(mvn -q --non-recursive \
+proj="$(mvn_ -q --non-recursive \
   -Dmaven.repo.local=${TMP_REPO} \
   org.codehaus.mojo:exec-maven-plugin:1.3.1:exec \
   -Dexec.executable="echo" -Dexec.args='${project.groupId} ${project.artifactId} ${project.version}')"
@@ -23,7 +23,7 @@ groupId="$(cut -d' ' -f1 <<<"$proj")"
 artifactId="$(cut -d' ' -f2 <<<"$proj")"
 version="$(cut -d' ' -f3 <<<"$proj")"
 
-submodules="$(mvn -q \
+submodules="$(mvn_ -q \
   -Dmaven.repo.local=${TMP_REPO} \
   org.codehaus.mojo:exec-maven-plugin:1.3.1:exec \
   -Dexec.executable="echo" \
@@ -38,13 +38,13 @@ submodules="$(mvn -q \
 
 echo >&2 "RESOLVING MAVEN DEPENDENCIES"
 # Maven 3.3.9
-mvn >&2 dependency:go-offline -B -Dmaven.repo.local=${TMP_REPO}
+mvn_ >&2 dependency:go-offline -B -Dmaven.repo.local=${TMP_REPO}
 # Maven 3.0.5
 #mvn >&2 org.apache.maven.plugins:maven-dependency-plugin:2.6:go-offline -Dmaven.repo.local=${TMP_REPO}
 
 echo >&2 "RESOLVING MAVEN REPOSITORIES"
 # Maven 3.3.9
-set_repos $(mvn -o \
+set_repos $(mvn_ -o \
   dependency:list-repositories -Dmaven.repo.local=${TMP_REPO} 2>&- \
   | grep -Eo '(id: |url: ).*$' | sed 's|[^ ]*||')
 # Maven 3.0.5
@@ -54,6 +54,7 @@ set_repos $(mvn -o \
 #  | grep -Eo '(id: |url: ).*$' | sed 's|[^ ]*||')
 
 echo >&2 "CREATING OUTPUT"
+(
 echo -n "{
   \"name\": \"$artifactId-$version\",
   \"groupId\": \"$groupId\",
@@ -107,3 +108,4 @@ echo -n "
   ]
 }
 "
+) > $output
