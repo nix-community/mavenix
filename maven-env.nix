@@ -145,8 +145,6 @@ in {
     name = builtins.trace "The name of this project is ${info.name}" info.name;
     src = filterSrc src;
 
-    LC_ALL = "en_US.UTF-8";
-
     buildInputs = [ mvn-offline ] ++ buildInputs;
 
     phases = "unpackPhase buildPhase installPhase";
