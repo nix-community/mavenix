@@ -81,6 +81,7 @@ for remote in $remotes; do
     file_real=$(echo $(echo $file | sed 's/-SNAPSHOT\./-[0-9]*\./'))
     repo=$(echo $file_ | cut -d '>' -f2)
     test "${repos[$repo]}" || continue
+    # TODO : Remove `url` to make dependencies registry independent
     echo -n "$sep
     {
       \"path\": \"$file_real\",

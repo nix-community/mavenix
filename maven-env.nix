@@ -26,6 +26,7 @@ let
 
   mapmap = fs: map (v: map (f: f v) fs);
 
+  # XXX: Maybe use `fetchMaven` instead?
   urlToScript = (dep: let
     inherit (dep) path url sha1;
 
@@ -116,9 +117,7 @@ let
     echo '<metadata>
       <groupId>${submod.groupId}</groupId>
       <artifactId>${submod.artifactId}</artifactId>
-      <versioning>
-        <versions><version>${submod.version}</version></versions>
-      </versioning>
+      <version>${submod.version}</version>
     </metadata>
     ' > $dir/${submod.name}.metadata.xml
   '';
