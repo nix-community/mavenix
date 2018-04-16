@@ -37,6 +37,7 @@ let
     }
   '';
 in writeScriptBin "mvnix" (''
+  #! /bin/bash
   set -e
 
   usage() {
