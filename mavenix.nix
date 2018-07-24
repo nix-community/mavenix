@@ -1,4 +1,4 @@
-{ lib, writeScriptBin, writeText, mktemp, nix, maven }:
+{ lib, bash, writeScriptBin, writeText, mktemp, nix, maven }:
 
 let
   name = "mvnix";
@@ -37,6 +37,7 @@ let
     }
   '';
 in writeScriptBin "mvnix" (''
+  #!${bash}/bin/bash
   set -e
 
   usage() {
