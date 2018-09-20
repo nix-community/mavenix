@@ -48,8 +48,7 @@ let
       esac
     done
 
-    test -d "$outputDir" || usage "\"$outputDir\" is not a directory"
-
+    mkdir -p "$outputDir"
     config="''${config-$outputDir/default.nix}"
     [ ! -e "$config" ] || usage "\"$config\" already exists"
 
@@ -66,13 +65,15 @@ let
     | tmpl info "$relInfo" \
     | tmpl settings "$settings"
     ) > "$config"
-    cp ${./mavenix.nix} "$outputDir/mavenix.nix"
+    cp ${./mavenix.nix} "$outputDir/mavenix.nix"; chmod u+w "$outputDir/mavenix.nix"
     (echo -e '{"deps":[],"metas":[]}') > "$outputDir/mavenix-info.json"
   '';
 
   mvnix-update = writeScript "mvnix-update" (''
     #!${bash}/bin/bash
     set -e
+
+    export PATH=${yq}/bin:$PATH
 
     usage() {
       test "$1" && echo -e Error: $1\\n || echo -n
@@ -88,7 +89,7 @@ let
     # Parse CLI arguments
     while test $1;do
       case $1 in
-        -d|--debug) set -x;shift;;
+        -d|--debug) debug=1;set -x;shift;;
         -*) usage;;
         *) config="$1";shift;;
       esac
@@ -115,12 +116,11 @@ let
     }
     trap "trap - TERM; cleanup; kill -- $$" EXIT INT TERM
 
-    cp -rf $initRepo/* $TMP_REPO || echo -n
+    cp -rf $initRepo/* $TMP_REPO || true
     chmod -R +w "$TMP_REPO" || echo >&2 Failed to set chmod on temp repo dir.
 
-    mvn_() {
-      $mvn_path -nsu --settings "$settings" "$@"
-    }
+    mvn_flags="$(test "$debug" && printf %s -X || true)"
+    mvn_() { $mvn_path $mvn_flags -nsu --settings "$settings" "$@"; }
     export -f mvn_
   '' + (builtins.readFile ./mkinfo.sh));
 in runCommand name {} ''

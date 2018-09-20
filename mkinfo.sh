@@ -2,34 +2,22 @@ echo >&2 "RUNING MAVEN INSTALL" >&2
 mvn_ >&2 install -B -Dmaven.repo.local=${TMP_REPO}
 
 echo >&2 "GETTING PROJECT INFO"
+pom="$(mvn_ help:effective-pom -B | grep -v '^\[\|^Effective \|^$' | xq -c .)"
+projects="$(jq -c '.projects.project // [.project]' <<<"$pom")"
+pq() { jq -rc "$1" <<<"$projects"; }
+export -f pq
 
-# XXX the maven-exec plugin will be put in the generated repo which might be
-# unwanted.
-proj="$(mvn_ -q --non-recursive \
-  org.codehaus.mojo:exec-maven-plugin:1.3.1:exec \
-  -Dexec.executable="echo" -Dexec.args='${project.groupId} ${project.artifactId} ${project.version}')"
-groupId="$(cut -d' ' -f1 <<<"$proj")"
-artifactId="$(cut -d' ' -f2 <<<"$proj")"
-version="$(cut -d' ' -f3 <<<"$proj")"
+groupId="$(pq .[0].groupId)"
+artifactId="$(pq .[0].artifactId)"
+version="$(pq .[0].version)"
 
-submodules="$(mvn_ -q \
-  org.codehaus.mojo:exec-maven-plugin:1.3.1:exec \
-  -Dexec.executable="echo" \
-  -Dexec.args='-n ,\\n
-    \\s{\\n
-    \\s\\s\\qname\\q: \\q${project.artifactId}-${project.version}\\q,\\n
-    \\s\\s\\qgroupId\\q: \\q${project.groupId}\\q,\\n
-    \\s\\s\\qartifactId\\q: \\q${project.artifactId}\\q,\\n
-    \\s\\s\\qversion\\q: \\q${project.version}\\q,\\n
-    \\s\\s\\qpath\\q: \\q${basedir}\\q\\n
-    \\s}')"
+modules="$(pq '[.[] | {name: (.artifactId + "-" + .version), groupId, artifactId, version, path: (.build.directory | sub("^'$PWD'/"; "./") | sub("/target"; ""))}]')"
 
 echo >&2 "RESOLVING MAVEN DEPENDENCIES"
 # Maven 3.3.9
 mvn_ >&2 dependency:go-offline -B -Dmaven.repo.local=${TMP_REPO}
 # Maven 3.0.5
 #mvn >&2 org.apache.maven.plugins:maven-dependency-plugin:2.6:go-offline -Dmaven.repo.local=${TMP_REPO}
-
 
 echo >&2 "CREATING OUTPUT"
 (
@@ -38,12 +26,7 @@ echo -n "{
   \"groupId\": \"$groupId\",
   \"artifactId\": \"$artifactId\",
   \"version\": \"$version\",
-  \"submodules\": ["
-
-echo -n $submodules \
-  | sed 's/,//;s|\\\\q'$PWD'|".|g;s/\\\\s/  /g;s/\\\\n/\n /g;s/\\\\q/"/g'
-echo -n  "
-  ],
+  \"submodules\": $modules,
   \"deps\": ["
 ( cd $TMP_REPO
 remotes="$(find . -type f -name "*.repositories" | sed 's|^\./||' | sort)"
@@ -58,11 +41,9 @@ for remote in $remotes; do
     file_real=$(echo $(echo $file | sed 's/-SNAPSHOT\./-[0-9]*\./'))
     repo=$(echo $file_ | cut -d '>' -f2 | sed 's/=$//')
     test "$repo" || continue
-    echo -n "$sep{
-      \"path\": \"$file_real\",
-      \"sha1\": \"$(grep -Eo '[0-9a-zA-Z]{40}' < $file_real.sha1)\"
-    }"
-    sep=", "
+    echo -n "$sep
+    {\"path\":\"$file_real\",\"sha1\":\"$(grep -Eo '[0-9a-zA-Z]{40}' < $file_real.sha1)\"}"
+    sep=","
   done
 done
 
@@ -74,7 +55,7 @@ metafiles="$(find . -type f -name "maven-metadata-*.xml"  | sed 's|^\./||' | sor
 sep=""
 for file in $metafiles; do
   repo=$(basename $file | sed 's/^maven-metadata-//;s/\.xml$//')
-  test "$repo" || continue
+  [[ "$repo" && "$repo" != "local"  ]] || continue
   echo -n "$sep{
       \"path\": \"$(dirname $file)\",
       \"content\": \"$(sed ':a;N;$!ba;s/\n/\\n/g;s/\"/\\\"/g' $file)\"

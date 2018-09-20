@@ -84,8 +84,8 @@ let
             echo "  \"$id\" = \"$url\";"
           done <<<"$(
             ${maven}/bin/mvn 2>&- -nsu -o --settings "${settings}" \
-              dependency:list-repositories \
-            | grep -Eo '(id: |url: ).*$' | sed 's|[^ ]*||' | tr -d '\n'
+              dependency:list-repositories --non-recursive \
+            | sed -n 's/.* \(id\|url\)://p' | tr -d '\n'
           )"
           echo "}"
         ) > $out
@@ -174,6 +174,7 @@ in config@{
 , settings    ? settings'
 , maven       ? maven'
 , buildInputs ? []
+, doCheck     ? true
 , ...
 }: let
   info = readJSONFile infoFile;
@@ -186,17 +187,25 @@ in config@{
   mvn-offline' = mvn-offline { inherit repo maven settings; };
 in {
   inherit emptyRepo repo remotes infoFile drvs maven settings config;
-  build = stdenv.mkDerivation ({
+  build = lib.makeOverridable stdenv.mkDerivation ({
     inherit src;
     name = info.name;
 
-    phases = "unpackPhase buildPhase installPhase";
+    phases = "unpackPhase checkPhase buildPhase installPhase";
+
+    checkPhase = ''
+      runHook preCheck
+
+      mvn -nsu test
+
+      runHook postCheck
+    '';
 
     buildPhase = ''
       runHook preBuild
 
       mvn -version
-      mvn -nsu package
+      mvn -nsu package -DskipTests=true -Dmaven.test.skip=true
 
       runHook postBuild
     '';
