@@ -1,10 +1,10 @@
-{ stdenv, lib, runCommand, writeText, fetchurl, makeWrapper, maven
+{ stdenv, lib, runCommand, fetchurl, makeWrapper, maven, writeText
 , requireFile
 }:
 
 let
-  inherit (builtins) attrNames attrValues;
-  inherit (lib) concatLists concatStrings;
+  inherit (builtins) attrNames attrValues pathExists toPath;
+  inherit (lib) concatLists concatStrings importJSON strings;
   maven' = maven;
   settings' = writeText "settings.xml" ''
     <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
@@ -23,8 +23,6 @@ let
       check = ! (isResult || isIgnore);
     in check
   ) src;
-
-  readJSONFile = file: builtins.fromJSON (builtins.readFile file);
 
   mapmap = fs: ls: concatLists (map (v: map (f: f v) fs) ls);
 
@@ -53,7 +51,7 @@ let
     dir="$out/${path}"
     dest="$dir/${name}"
     mkdir -p "$dir"
-    ln -sfv "${writeText name content}" "$dest"
+    ln -sfv "${writeText "maven-metadata.xml" content}" "$dest"
     linkSnapshot "$dest"
   '');
 
@@ -64,35 +62,42 @@ let
   '';
 
   transDeps = drvs: concatLists (map
-    (drv: (readJSONFile "${drv}/share/java/mavenix-info.json").deps)
-    (attrValues drvs)
+    (drv: (importJSON "${drv}/share/java/mavenix-info.json").deps)
+    drvs
   );
 
   transMetas = drvs: concatLists (map
-    (drv: (readJSONFile "${drv}/share/java/mavenix-info.json").metas)
-    (attrValues drvs)
+    (drv: (importJSON "${drv}/share/java/mavenix-info.json").metas)
+    drvs
   );
 
   getRemotes = { src, maven, settings ? settings' }:
-    import (stdenv.mkDerivation {
+    importJSON (stdenv.mkDerivation {
       inherit src;
-      name = "remotes.nix";
+      name = "remotes.json";
       phases = [ "unpackPhase" "installPhase" ];
       installPhase = ''
-        ( echo "{"
-          while read id url; do
-            echo "  \"$id\" = \"$url\";"
-          done <<<"$(
-            ${maven}/bin/mvn 2>&- -nsu -o --settings "${settings}" \
-              dependency:list-repositories --non-recursive \
-            | sed -n 's/.* \(id\|url\)://p' | tr -d '\n'
-          )"
+        parse() {
+          local sep=""
+          echo "{"
+          while test "$1"; do
+            echo "$sep\"$1\":\"$2\""
+            sep=","
+            shift 2
+          done
           echo "}"
+        }
+        parse $(
+          ${maven}/bin/mvn 2>&- -B -nsu -o --settings "${settings}" \
+            dependency:list-repositories \
+          | sed -n 's/.* \(id\|url\)://p' | tr -d '\n'
         ) > $out
       '';
     });
 
-  mkRepo = { remotes ? {}, drvs ? {}, deps ? [], metas ? [] }: runCommand "mk-repo" {} ''
+  #filterDep = drv: pathExists "${drv}/share/java/mavenix-info.json"
+
+  mkRepo = { remotes ? {}, drvs ? [], deps ? [], metas ? [] }: runCommand "mk-repo" {} ''
     set -e
     mkdir -p "$out"
     TMP_REPO="$out"
@@ -131,7 +136,7 @@ let
     ${concatStrings (map (urlToScript remotes) (deps ++ (transDeps drvs)))}
     ${concatStrings (mapmap
       (map metadataToScript (attrNames remotes)) (metas ++ (transMetas drvs)))}
-    ${concatStrings (map drvToScript (attrValues drvs))}
+    ${concatStrings (map drvToScript drvs)}
   '';
 
   cp-artifact = submod: ''
@@ -160,31 +165,34 @@ let
     ' > $dir/${submod.name}.metadata.xml
   '';
 
-  mvn-offline = { repo, maven, settings }:
+  mvn-offline = { repo, maven, settings, debug ? false }:
     runCommand "mvn-offline" { buildInputs = [ makeWrapper ]; } ''
       makeWrapper ${maven}/bin/mvn $out/bin/mvn \
+        --add-flags "-B" \
         --add-flags "--offline" \
         --add-flags "--settings ${settings}" \
-        --add-flags "-Dmaven.repo.local=${repo}"
+        --add-flags "-Dmaven.repo.local=${repo}" \
+        ${strings.optionalString debug ''--add-flags "-e -X"''}
     '';
 in config@{
   src
 , infoFile
-, drvs        ? {}
+, drvs        ? []
 , settings    ? settings'
 , maven       ? maven'
 , buildInputs ? []
 , doCheck     ? true
+, debug       ? false
 , ...
 }: let
-  info = readJSONFile infoFile;
+  info = importJSON infoFile;
   remotes = getRemotes { inherit src maven settings; };
   repo = mkRepo {
     inherit (info) deps metas;
     inherit drvs remotes;
   };
   emptyRepo = mkRepo { inherit drvs remotes; };
-  mvn-offline' = mvn-offline { inherit repo maven settings; };
+  mvn-offline' = mvn-offline { inherit repo maven settings debug; };
 in {
   inherit emptyRepo repo remotes infoFile drvs maven settings config;
   build = lib.makeOverridable stdenv.mkDerivation ({
@@ -225,5 +233,5 @@ in {
 
       runHook postInstall
     '';
-  } // (config // { buildInputs = buildInputs ++ [ mvn-offline' ]; }));
+  } // (config // { drvs = null; buildInputs = buildInputs ++ [ mvn-offline' ]; }));
 }

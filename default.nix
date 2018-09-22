@@ -119,8 +119,8 @@ let
     cp -rf $initRepo/* $TMP_REPO || true
     chmod -R +w "$TMP_REPO" || echo >&2 Failed to set chmod on temp repo dir.
 
-    mvn_flags="$(test "$debug" && printf %s -X || true)"
-    mvn_() { $mvn_path $mvn_flags -nsu --settings "$settings" "$@"; }
+    mvn_flags="$(test "$debug" && printf %s "-e -X" || true)"
+    mvn_() { $mvn_path $mvn_flags -B -nsu --settings "$settings" "$@"; }
     export -f mvn_
   '' + (builtins.readFile ./mkinfo.sh));
 in runCommand name {} ''

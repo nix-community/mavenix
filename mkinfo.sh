@@ -2,7 +2,7 @@ echo >&2 "RUNING MAVEN INSTALL" >&2
 mvn_ >&2 install -B -Dmaven.repo.local=${TMP_REPO}
 
 echo >&2 "GETTING PROJECT INFO"
-pom="$(mvn_ help:effective-pom -B | grep -v '^\[\|^Effective \|^$' | xq -c .)"
+pom="$(mvn_ help:effective-pom | grep -v '^\[\|^Effective \|^$' | xq -c .)"
 projects="$(jq -c '.projects.project // [.project]' <<<"$pom")"
 pq() { jq -rc "$1" <<<"$projects"; }
 export -f pq
@@ -15,7 +15,7 @@ modules="$(pq '[.[] | {name: (.artifactId + "-" + .version), groupId, artifactId
 
 echo >&2 "RESOLVING MAVEN DEPENDENCIES"
 # Maven 3.3.9
-mvn_ >&2 dependency:go-offline -B -Dmaven.repo.local=${TMP_REPO}
+mvn_ >&2 dependency:go-offline -Dmaven.repo.local=${TMP_REPO}
 # Maven 3.0.5
 #mvn >&2 org.apache.maven.plugins:maven-dependency-plugin:2.6:go-offline -Dmaven.repo.local=${TMP_REPO}
 
