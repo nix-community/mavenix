@@ -11,6 +11,7 @@ let
     , system ? builtins.currentSystem
     , mavenix ? pkgs.callPackage (import ./%%env%%) {}
     }: mavenix {
+      # name = "";
       src = ./%%src%%;
       infoFile = ./%%info%%;%%settings%%
     }
