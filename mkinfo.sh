@@ -1,8 +1,8 @@
 echo >&2 "RUNING MAVEN INSTALL" >&2
-mvn_ >&2 install -Dmaven.test.skip.exec=true -Dmaven.repo.local=${TMP_REPO}
+mvn_ >&2 package -Dmaven.test.skip.exec=true -Dmaven.repo.local=${TMP_REPO}
 
 echo >&2 "GETTING PROJECT INFO"
-pom="$(mvn_ help:effective-pom | grep -v '^\[\|^Effective \|^$' | xq -c .)"
+pom="$(mvn_out help:effective-pom | grep -v '^\[\|^Effective \|^$' | xq -c .)"
 projects="$(jq -c '.projects.project // [.project]' <<<"$pom")"
 pq() { jq -rc "$1" <<<"$projects"; }
 export -f pq

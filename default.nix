@@ -66,7 +66,15 @@ let
     | tmpl settings "$settings"
     ) > "$config"
     cp ${./mavenix.nix} "$outputDir/mavenix.nix"; chmod u+w "$outputDir/mavenix.nix"
-    (echo -e '{"deps":[],"metas":[]}') > "$outputDir/mavenix-info.json"
+    (echo -e '{"name":"","deps":[],"metas":[]}') > "$outputDir/mavenix-info.json"
+
+    echo >&2 "
+      Created stubs in '$outputDir'.
+
+      Edit the file '$config'
+      To capture dependencies run: 'mvnix-update'
+      Then build with: 'nix-build $config -A build'
+    "
   '';
 
   mvnix-update = writeScript "mvnix-update" (''
@@ -121,6 +129,7 @@ let
 
     mvn_flags="$(test "$debug" && printf %s "-e -X" || true)"
     mvn_() { $mvn_path $mvn_flags -B -nsu --settings "$settings" "$@"; }
+    mvn_out() { $mvn_path -B -nsu --settings "$settings" "$@"; }
     export -f mvn_
   '' + (builtins.readFile ./mkinfo.sh));
 in runCommand name {} ''

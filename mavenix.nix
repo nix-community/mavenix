@@ -1,5 +1,5 @@
 { stdenv, lib, runCommand, fetchurl, makeWrapper, maven, writeText
-, requireFile
+, requireFile, yq
 }:
 
 let
@@ -29,7 +29,7 @@ let
   # XXX: Maybe use `fetchMaven` instead?
   urlToScript = (remotes: dep: let
     inherit (dep) path sha1;
-    authenticated = false;
+    authenticated = if dep?authenticated then dep.authenticated else false;
 
     fetch = (if authenticated then requireFile else fetchurl) {
       inherit sha1;
@@ -41,7 +41,6 @@ let
     dest="$dir/${baseNameOf path}"
     mkdir -p "$dir"
     ln -sfv "${fetch}" "$dest"
-    linkSnapshot "$dest"
   '');
 
   metadataToScript = (remote: meta: let
@@ -52,7 +51,7 @@ let
     dest="$dir/${name}"
     mkdir -p "$dir"
     ln -sfv "${writeText "maven-metadata.xml" content}" "$dest"
-    linkSnapshot "$dest"
+    ( cd "$dir"; linkSnapshot < "$dest" )
   '');
 
   drvToScript = drv: ''
@@ -88,7 +87,7 @@ let
           echo "}"
         }
         parse $(
-          ${maven}/bin/mvn 2>&- -B -nsu -o --settings "${settings}" \
+          ${maven}/bin/mvn 2>&- -B -nsu --offline --settings "${settings}" \
             dependency:list-repositories \
           | sed -n 's/.* \(id\|url\)://p' | tr -d '\n'
         ) > $out
@@ -110,13 +109,12 @@ let
     }
 
     linkSnapshot() {
-      local file="$(basename $1)"
-      local ext="''${file##*.}"
-      local dir="$(dirname $1)"
-      local version="$(basename $dir)"
-      local name="$(basename `dirname $dir`)"
-      local dest="$dir/$name-$version.$ext"
-      test -f "$dest" || ln -sv "$1" "$dest"
+      ${yq}/bin/xq -r '
+        .metadata as $o
+          | [.metadata.versioning.snapshotVersions.snapshotVersion] | flatten | .[]
+          | ((if .classifier? then ("-" + .classifier) else "" end) + "." + .extension) as $e
+          | $o.artifactId + "-" + .value + $e + " " + $o.artifactId + "-" + $o.version + $e
+      ' | xargs -L1 ln -sfv
     }
 
     getMavenPathFromProperties() {
@@ -177,6 +175,7 @@ let
 in config@{
   src
 , infoFile
+, deps        ? []
 , drvs        ? []
 , settings    ? settings'
 , maven       ? maven'
@@ -185,7 +184,7 @@ in config@{
 , debug       ? false
 , ...
 }: let
-  info = importJSON infoFile;
+  info = let i = importJSON infoFile; in i // { deps = i.deps ++ deps; } ;
   remotes = getRemotes { inherit src maven settings; };
   repo = mkRepo {
     inherit (info) deps metas;
@@ -204,7 +203,7 @@ in {
     checkPhase = ''
       runHook preCheck
 
-      mvn -nsu test
+      mvn --offline -B --settings ${settings} -Dmaven.repo.local=${repo} -nsu test
 
       runHook postCheck
     '';
@@ -212,8 +211,8 @@ in {
     buildPhase = ''
       runHook preBuild
 
-      mvn -version
-      mvn -nsu package -DskipTests=true -Dmaven.test.skip=true
+      mvn --offline -B -version
+      mvn --offline -B --settings ${settings} -Dmaven.repo.local=${repo} -nsu package -DskipTests=true -Dmaven.test.skip=true
 
       runHook postBuild
     '';
@@ -233,5 +232,9 @@ in {
 
       runHook postInstall
     '';
-  } // (config // { drvs = null; buildInputs = buildInputs ++ [ mvn-offline' ]; }));
+  } // (config // {
+    deps = null;
+    drvs = null;
+    buildInputs = buildInputs ++ [ maven ];
+  }));
 }
