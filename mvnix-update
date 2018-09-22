@@ -1,3 +1,55 @@
+#!/bin/bash
+set -e
+
+usage() {
+  test "$1" && echo -e Error: $1\\n || echo -n
+  cat <<EOF
+  Usage: $(basename $0) <NIX-FILE>
+EOF
+  exit 1
+}
+
+# Default values
+config="default.nix"
+
+# Parse CLI arguments
+while test $1;do
+  case $1 in
+    -d|--debug) debug=1;set -x;shift;;
+    -*) usage;;
+    *) config="$1";shift;;
+  esac
+done
+
+eval-env() {
+  nix-instantiate 2>&- --eval \
+    -E "let env = import \"$(realpath "$config")\" {}; in toString ($1)" \
+  | sed 's/^"//;s/"$//'
+}
+build-env() {
+  nix-build --no-out-link \
+    -E "let env = import \"$(realpath "$config")\" {}; in ($1)"
+}
+
+initRepo=$(build-env env.emptyRepo)
+output=$(eval-env env.infoFile)
+mvn_path=$(build-env env.maven)/bin/mvn
+settings=$(eval-env env.settings)
+
+TMP_REPO="$(mktemp -d --tmpdir mavenix-m2-repo.XXXXXX)"
+cleanup() {
+  rm -rf "$TMP_REPO" || echo -n
+}
+trap "trap - TERM; cleanup; kill -- $$" EXIT INT TERM
+
+cp -rf $initRepo/* $TMP_REPO || true
+chmod -R +w "$TMP_REPO" || echo >&2 Failed to set chmod on temp repo dir.
+
+mvn_flags="$(test "$debug" && printf %s "-e -X" || true)"
+mvn_() { $mvn_path $mvn_flags -B -nsu --settings "$settings" "$@"; }
+mvn_out() { $mvn_path -B -nsu --settings "$settings" "$@"; }
+export -f mvn_
+
 echo >&2 "RUNING MAVEN INSTALL" >&2
 mvn_ >&2 package -Dmaven.test.skip.exec=true -Dmaven.repo.local=${TMP_REPO}
 
