@@ -36,7 +36,7 @@ output=$(eval-env env.infoFile)
 settings=$(eval-env env.settings)
 build_inputs=$(eval-env '(import <nixpkgs> {}).lib.makeBinPath env.config.buildInputs')
 extra_deps=$(sed 's/^\[//;s/\]$//;s/\(.\)$/\1,/' \
-  $(eval-env 'builtins.toFile "extra-deps.json" (builtins.toJSON env.config.deps)'))
+  $(build-env '(import <nixpkgs> {}).writeText "extra-deps.json" (builtins.toJSON env.config.deps)'))
 
 TMP_REPO="$(mktemp -d --tmpdir mavenix-m2-repo.XXXXXX)"
 cleanup() {
