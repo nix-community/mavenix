@@ -14,19 +14,8 @@ let
     </settings>
   '';
 
-  filterSrc = src: builtins.filterSource (path: type:
-    let
-      p = toString path;
-      #p2s = pathToString src;
-      isResult = type == "symlink" && lib.hasPrefix "result" (builtins.baseNameOf p);
-      isIgnore = type == "directory" && builtins.elem (builtins.baseNameOf p) [ "target" ".git" ];
-      check = ! (isResult || isIgnore);
-    in check
-  ) src;
-
   mapmap = fs: ls: concatLists (map (v: map (f: f v) fs) ls);
 
-  # XXX: Maybe use `fetchMaven` instead?
   urlToScript = (remotes: dep: let
     inherit (dep) path sha1;
     authenticated = if dep?authenticated then dep.authenticated else false;
@@ -35,23 +24,19 @@ let
       inherit sha1;
       urls = map (r: "${r}/${path}") (attrValues remotes);
     };
-  # XXX: What does this do? move to bash function in mkRepo
   in ''
-    dir="$out/$(dirname ${path})"
-    dest="$dir/${baseNameOf path}"
-    mkdir -p "$dir"
-    ln -sfv "${fetch}" "$dest"
+    mkdir -p "$(dirname ${path})"
+    ln -sfv "${fetch}" "${path}"
   '');
 
   metadataToScript = (remote: meta: let
     inherit (meta) path content;
     name = "maven-metadata-${remote}.xml";
   in ''
-    dir="$out/${path}"
-    dest="$dir/${name}"
-    mkdir -p "$dir"
-    ln -sfv "${writeText "maven-metadata.xml" content}" "$dest"
-    ( cd "$dir"; linkSnapshot < "$dest" )
+    mkdir -p "${path}"
+    ( cd "${path}"
+      ln -sfv "${writeText "maven-metadata.xml" content}" "${name}"
+      linkSnapshot < "${name}" )
   '');
 
   drvToScript = drv: ''
@@ -94,18 +79,14 @@ let
       '';
     });
 
-  #filterDep = drv: pathExists "${drv}/share/java/mavenix-info.json"
-
   mkRepo = { remotes ? {}, drvs ? [], deps ? [], metas ? [] }: runCommand "mk-repo" {} ''
     set -e
-    mkdir -p "$out"
-    TMP_REPO="$out"
 
     getMavenPath() {
       local version="$(sed -n 's|^version=||p' "$1")"
       local groupId="$(sed -n 's|^groupId=||p' "$1")"
       local artifactId="$(sed -n 's|^artifactId=||p' "$1")"
-      echo "$TMP_REPO/$(sed 's|\.|/|g' <<<"$groupId")/$artifactId/$version/$artifactId-$version"
+      echo "$(sed 's|\.|/|g' <<<"$groupId")/$artifactId/$version/$artifactId-$version"
     }
 
     linkSnapshot() {
@@ -131,10 +112,13 @@ let
       fi
     }
 
-    ${concatStrings (map (urlToScript remotes) (deps ++ (transDeps drvs)))}
-    ${concatStrings (mapmap
-      (map metadataToScript (attrNames remotes)) (metas ++ (transMetas drvs)))}
-    ${concatStrings (map drvToScript drvs)}
+    mkdir -p "$out"
+    (cd $out
+      ${concatStrings (map (urlToScript remotes) (deps ++ (transDeps drvs)))}
+      ${concatStrings (mapmap
+        (map metadataToScript (attrNames remotes)) (metas ++ (transMetas drvs)))}
+      ${concatStrings (map drvToScript drvs)}
+    )
   '';
 
   cp-artifact = submod: ''
@@ -162,17 +146,7 @@ let
     </metadata>
     ' > $dir/${submod.name}.metadata.xml
   '';
-
-  mvn-offline = { repo, maven, settings, debug ? false }:
-    runCommand "mvn-offline" { buildInputs = [ makeWrapper ]; } ''
-      makeWrapper ${maven}/bin/mvn $out/bin/mvn \
-        --add-flags "-B" \
-        --add-flags "--offline" \
-        --add-flags "--settings ${settings}" \
-        --add-flags "-Dmaven.repo.local=${repo}" \
-        ${strings.optionalString debug ''--add-flags "-e -X"''}
-    '';
-in config@{
+in config'@{
   src
 , infoFile
 , deps        ? []
@@ -184,16 +158,16 @@ in config@{
 , debug       ? false
 , ...
 }: let
-  info = let i = importJSON infoFile; in i // { deps = i.deps ++ deps; } ;
+  config = config' // { buildInputs = buildInputs ++ [ maven ]; };
+  info = importJSON infoFile;
   remotes = getRemotes { inherit src maven settings; };
   repo = mkRepo {
     inherit (info) deps metas;
     inherit drvs remotes;
   };
   emptyRepo = mkRepo { inherit drvs remotes; };
-  mvn-offline' = mvn-offline { inherit repo maven settings debug; };
 in {
-  inherit emptyRepo repo remotes infoFile drvs maven settings config;
+  inherit emptyRepo repo remotes infoFile maven settings config;
   build = lib.makeOverridable stdenv.mkDerivation ({
     inherit src;
     name = info.name;
@@ -235,6 +209,5 @@ in {
   } // (config // {
     deps = null;
     drvs = null;
-    buildInputs = buildInputs ++ [ maven ];
   }));
 }

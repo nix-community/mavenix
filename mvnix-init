@@ -7,8 +7,8 @@ usage() {
   Usage: $(basename $0) [OPTIONS] <OUTPUT-NIX-FILE>
 
   OPTIONS
-    --settings|-s <path>    Maven settings.xml file
     --output|-o <dir>       Generated nix files output directory
+    --debug|-d              Debug mode
 EOF
   exit 1
 }
@@ -22,7 +22,6 @@ outputDir="."
 while test $1;do
   case $1 in
     -o|--output) outputDir="$2";shift 2;;
-    -s|--settings) settings="$2";shift 2;;
     -d|--debug) set -x;shift;;
     -*) usage;;
     *) config="$1";shift;;
@@ -33,25 +32,24 @@ mkdir -p "$outputDir"
 config="${config-$outputDir/default.nix}"
 [ ! -e "$config" ] || usage "\"$config\" already exists"
 
-test "$settings" && settings="
-  settings = ./$(realpath --relative-to="$(dirname $config)" "$settings");"
-
 relSrc="$(realpath --relative-to="$(dirname $config)" ".")"
 relEnv="$(realpath --relative-to="$(dirname $config)" "$outputDir/mavenix.nix")"
 relInfo="$(realpath --relative-to="$(dirname $config)" "$outputDir/mavenix-info.json")"
 
-(cat "$CONFIG_TEMPLATE" \
+copy() { cp "$1" "$2"; echo "$2"; }
+echo >&2 "
+  Creating files:
+"
+copy <(cat "$CONFIG_TEMPLATE" \
 | tmpl src "$relSrc" \
 | tmpl env "$relEnv" \
 | tmpl info "$relInfo" \
-| tmpl settings "$settings"
-) > "$config"
-cp "$MAVENIX_SCRIPT" "$outputDir/mavenix.nix"; chmod u+w "$outputDir/mavenix.nix"
-(echo -e '{"name":"","deps":[],"metas":[]}') > "$outputDir/mavenix-info.json"
+) "$config"
+copy "$MAVENIX_SCRIPT" "$outputDir/mavenix.nix"
+chmod u+w "$outputDir/mavenix.nix"
+copy <(echo -e '{"name":"","deps":[],"metas":[]}') "$outputDir/mavenix-info.json"
 
 echo >&2 "
-  Created stubs in '$outputDir'.
-
   Edit the file '$config'
   To capture dependencies run: 'mvnix-update'
   Then build with: 'nix-build $config -A build'

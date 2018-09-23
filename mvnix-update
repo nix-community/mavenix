@@ -33,8 +33,10 @@ build-env() {
 
 initRepo=$(build-env env.emptyRepo)
 output=$(eval-env env.infoFile)
-mvn_path=$(build-env env.maven)/bin/mvn
 settings=$(eval-env env.settings)
+build_inputs=$(eval-env '(import <nixpkgs> {}).lib.makeBinPath env.config.buildInputs')
+extra_deps=$(sed 's/^\[//;s/\]$//;s/\(.\)$/\1,/' \
+  $(eval-env 'builtins.toFile "extra-deps.json" (builtins.toJSON env.config.deps)'))
 
 TMP_REPO="$(mktemp -d --tmpdir mavenix-m2-repo.XXXXXX)"
 cleanup() {
@@ -42,16 +44,18 @@ cleanup() {
 }
 trap "trap - TERM; cleanup; kill -- $$" EXIT INT TERM
 
-cp -rf $initRepo/* $TMP_REPO || true
+cp -rf $initRepo/* $TMP_REPO >/dev/null 2>&1 || true
 chmod -R +w "$TMP_REPO" || echo >&2 Failed to set chmod on temp repo dir.
 
 mvn_flags="$(test "$debug" && printf %s "-e -X" || true)"
-mvn_() { $mvn_path $mvn_flags -B -nsu --settings "$settings" "$@"; }
-mvn_out() { $mvn_path -B -nsu --settings "$settings" "$@"; }
-export -f mvn_
+mvn_() { mvn $mvn_flags -B -nsu --settings "$settings" "$@"; }
+mvn_out() { mvn -B -nsu --settings "$settings" "$@"; }
 
-echo >&2 "RUNING MAVEN INSTALL" >&2
-mvn_ >&2 package -Dmaven.test.skip.exec=true -Dmaven.repo.local=${TMP_REPO}
+echo >&2 "ADDING BUILD INPUTS TO \$PATH"
+export PATH="$build_inputs:$PATH"
+
+echo >&2 "RUNING MAVEN INSTALL"
+mvn_ >&2 package -Dmaven.test.skip.exec=true -DskipTests -Dmaven.repo.local=${TMP_REPO}
 
 echo >&2 "GETTING PROJECT INFO"
 pom="$(mvn_out help:effective-pom | grep -v '^\[\|^Effective \|^$' | xq -c .)"
@@ -66,10 +70,7 @@ version="$(pq .[0].version)"
 modules="$(pq '[.[] | {name: (.artifactId + "-" + .version), groupId, artifactId, version, path: (.build.directory | sub("^'$PWD'/"; "./") | sub("/target"; ""))}]')"
 
 echo >&2 "RESOLVING MAVEN DEPENDENCIES"
-# Maven 3.3.9
-mvn_ >&2 dependency:go-offline -Dmaven.test.skip.exec=true -Dmaven.repo.local=${TMP_REPO}
-# Maven 3.0.5
-#mvn >&2 org.apache.maven.plugins:maven-dependency-plugin:2.6:go-offline -Dmaven.repo.local=${TMP_REPO}
+mvn_ >&2 dependency:go-offline -Dmaven.repo.local=${TMP_REPO}
 
 echo >&2 "CREATING OUTPUT"
 (
@@ -79,7 +80,7 @@ echo -n "{
   \"artifactId\": \"$artifactId\",
   \"version\": \"$version\",
   \"submodules\": $modules,
-  \"deps\": ["
+  \"deps\": [ $extra_deps"
 ( cd $TMP_REPO
 remotes="$(find . -type f -name "*.repositories" | sed 's|^\./||' | sort)"
 sep=""
@@ -102,7 +103,6 @@ done
 echo -n "
   ],
   \"metas\": ["
-# XXX: is this needed? Yes, for transitive deps
 metafiles="$(find . -type f -name "maven-metadata-*.xml"  | sed 's|^\./||' | sort)"
 sep=""
 for file in $metafiles; do

@@ -10,11 +10,16 @@ let
     { pkgs ? import <nixpkgs> { inherit system; }
     , system ? builtins.currentSystem
     , mavenix ? pkgs.callPackage (import ./%%env%%) {}
+    , src ? ./%%src%%
     , doCheck ? false
     }: mavenix {
-      inherit doCheck;
-      src = ./%%src%%;
-      infoFile = ./%%info%%;%%settings%%
+      inherit src doCheck;
+      infoFile = ./%%info%%;
+      # settings = ./settings.xml;
+      # deps = [ { path = "org/extra/dependencies"; sha1 = ""; } ];
+      # drvs = [ ];
+      # buildInputs = [ git ];
+      # maven = maven.override { jdk = oraclejdk10; };
     }
   '';
 in stdenv.mkDerivation {
