@@ -158,7 +158,9 @@ in config'@{
 , debug       ? false
 , ...
 }: let
-  config = config' // { buildInputs = buildInputs ++ [ maven ]; };
+  config = config' // {
+    buildInputs = buildInputs ++ [ maven ];
+  };
   info = importJSON infoFile;
   remotes = getRemotes { inherit src maven settings; };
   repo = mkRepo {
@@ -167,7 +169,7 @@ in config'@{
   };
   emptyRepo = mkRepo { inherit drvs remotes; };
 in {
-  inherit emptyRepo repo remotes infoFile maven settings config;
+  inherit emptyRepo repo remotes deps infoFile maven settings config;
   build = lib.makeOverridable stdenv.mkDerivation ({
     inherit src;
     name = info.name;

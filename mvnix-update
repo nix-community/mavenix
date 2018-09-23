@@ -33,10 +33,10 @@ build-env() {
 
 initRepo=$(build-env env.emptyRepo)
 output=$(eval-env env.infoFile)
-settings=$(eval-env env.settings)
+settings=$(build-env env.settings)
 build_inputs=$(eval-env '(import <nixpkgs> {}).lib.makeBinPath env.config.buildInputs')
 extra_deps=$(sed 's/^\[//;s/\]$//;s/\(.\)$/\1,/' \
-  $(build-env '(import <nixpkgs> {}).writeText "extra-deps.json" (builtins.toJSON env.config.deps)'))
+  $(build-env '(import <nixpkgs> {}).writeText "extra-deps.json" (builtins.toJSON env.deps)'))
 
 TMP_REPO="$(mktemp -d --tmpdir mavenix-m2-repo.XXXXXX)"
 cleanup() {
