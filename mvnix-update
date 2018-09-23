@@ -54,7 +54,7 @@ mvn_out() { mvn -B -nsu --settings "$settings" "$@"; }
 echo >&2 "ADDING BUILD INPUTS TO \$PATH"
 export PATH="$build_inputs:$PATH"
 
-echo >&2 "RUNING MAVEN INSTALL"
+echo >&2 "RUNNING MAVEN PACKAGE"
 mvn_ >&2 package -Dmaven.test.skip.exec=true -DskipTests -Dmaven.repo.local=${TMP_REPO}
 
 echo >&2 "GETTING PROJECT INFO"
