@@ -154,6 +154,7 @@ in config'@{
 , settings    ? settings'
 , maven       ? maven'
 , buildInputs ? []
+, remotes     ? getRemotes { inherit src maven settings; };
 , doCheck     ? true
 , debug       ? false
 , ...
@@ -162,7 +163,6 @@ in config'@{
     buildInputs = buildInputs ++ [ maven ];
   };
   info = importJSON infoFile;
-  remotes = getRemotes { inherit src maven settings; };
   repo = mkRepo {
     inherit (info) deps metas;
     inherit drvs remotes;
@@ -187,7 +187,7 @@ in {
     buildPhase = ''
       runHook preBuild
 
-      mvn --offline -B -version
+      mvn --offline -B -version -Dmaven.repo.local=${repo}
       mvn --offline -B --settings ${settings} -Dmaven.repo.local=${repo} -nsu package -DskipTests=true -Dmaven.test.skip=true
 
       runHook postBuild
@@ -211,5 +211,6 @@ in {
   } // (config // {
     deps = null;
     drvs = null;
+    remotes = null;
   }));
 }
