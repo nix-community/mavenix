@@ -7,8 +7,7 @@ let
 
   default-tmpl = writeText "default-tmpl.nix" ''
     ${gen-header} Configure the build here!
-    { pkgs ? import <nixpkgs> { inherit system; }
-    , system ? builtins.currentSystem
+    { pkgs ? import <nixpkgs> {}
     , mavenix ? pkgs.callPackage (import ./%%env%%) {}
     , src ? ./%%src%%
     , doCheck ? false
