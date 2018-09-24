@@ -154,7 +154,7 @@ in config'@{
 , settings    ? settings'
 , maven       ? maven'
 , buildInputs ? []
-, remotes     ? getRemotes { inherit src maven settings; };
+, remotes     ? getRemotes { inherit src maven settings; }
 , doCheck     ? true
 , debug       ? false
 , ...
