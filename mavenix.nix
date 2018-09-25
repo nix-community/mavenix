@@ -174,8 +174,6 @@ in {
     inherit src;
     name = info.name;
 
-    phases = "unpackPhase checkPhase buildPhase installPhase";
-
     checkPhase = ''
       runHook preCheck
 
