@@ -72,6 +72,9 @@ modules="$(pq '[.[] | {name: (.artifactId + "-" + .version), groupId, artifactId
 echo >&2 "RESOLVING MAVEN DEPENDENCIES"
 mvn_ >&2 dependency:go-offline -Dmaven.repo.local=${TMP_REPO}
 
+parent_poms="$(pq '.[].parent as $p | $p | .groupId | sub("\\."; "/"; "g") as $g | $p | $g + "/" + .artifactId + "/" + .version + "/" + .artifactId + "-" + .version + ".pom"')"
+echo "$parent_poms"
+
 echo >&2 "CREATING OUTPUT"
 (
 echo -n "{
@@ -110,6 +113,20 @@ for file in $metafiles; do
   [[ "$repo" && "$repo" != "local"  ]] || continue
   echo -n "$sep{
       \"path\": \"$(dirname $file)\",
+      \"content\": \"$(sed ':a;N;$!ba;s/\n/\\n/g;s/\"/\\\"/g' $file)\"
+    }"
+  sep=", "
+done
+
+echo -n "
+  ],
+  \"parent\": ["
+sep=""
+for file in $(echo $parent_poms); do
+  echo >&2 $(ls -al $(dirname $PWD/$file))
+  [ -e "$file" ] || continue
+  echo -n "$sep{
+      \"path\": \"$file\",
       \"content\": \"$(sed ':a;N;$!ba;s/\n/\\n/g;s/\"/\\\"/g' $file)\"
     }"
   sep=", "

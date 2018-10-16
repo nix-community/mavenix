@@ -55,12 +55,13 @@ let
     drvs
   );
 
-  getRemotes = { src, maven, settings ? settings' }:
+  getRemotes = { src, maven, settings ? settings', parent ? [] }:
     importJSON (stdenv.mkDerivation {
       inherit src;
       name = "remotes.json";
       phases = [ "unpackPhase" "installPhase" ];
       installPhase = ''
+        set -ex
         parse() {
           local sep=""
           echo "{"
@@ -71,11 +72,18 @@ let
           done
           echo "}"
         }
+        echo $HOME
+        mkdir -p maven-repo
+        ${concatStrings (map
+          (p: "mkdir -p $(dirname maven-repo/${p.path}); cp ${writeText "parent.pom" p.content} maven-repo/${p.path};")
+          parent
+        )}
         parse $(
-          ${maven}/bin/mvn 2>&- -B -nsu --offline --settings "${settings}" \
-            dependency:list-repositories \
-          | sed -n 's/.* \(id\|url\)://p' | tr -d '\n'
+          ${maven}/bin/mvn -B -nsu --offline --settings "${settings}" \
+            dependency:list-repositories -Dmaven.repo.local=maven-repo \
+          | tee debug.log | sed -n 's/.* \(id\|url\)://p' | tr -d '\n'
         ) > $out
+        cat debug.log
       '';
     });
 
@@ -149,12 +157,13 @@ let
 in config'@{
   src
 , infoFile
+, info        ? importJSON infoFile
 , deps        ? []
 , drvs        ? []
 , settings    ? settings'
 , maven       ? maven'
 , buildInputs ? []
-, remotes     ? getRemotes { inherit src maven settings; }
+, remotes     ? getRemotes { inherit src maven settings; inherit (info) parent; }
 , doCheck     ? true
 , debug       ? false
 , ...
@@ -162,7 +171,6 @@ in config'@{
   config = config' // {
     buildInputs = buildInputs ++ [ maven ];
   };
-  info = importJSON infoFile;
   repo = mkRepo {
     inherit (info) deps metas;
     inherit drvs remotes;
