@@ -35,4 +35,11 @@ in stdenv.mkDerivation {
     wrapProgram $out/bin/mvnix-update \
       --prefix PATH : ${lib.makeBinPath [ yq nix mktemp ]}
   '';
+  meta = with stdenv.lib; {
+    homepage = https://github.com/icetan/mavenix;
+    description = "Mavenix: deterministic builds for Maven using Nix?";
+    license = licenses.unlicense;
+    maintainers = [ { email = "me@icetan.org"; github = "icetan"; name = "Christopher Fredén"; } ];
+    platforms = [ "x86_64-linux" ];
+  };
 }
