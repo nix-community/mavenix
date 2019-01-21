@@ -156,7 +156,11 @@ in config'@{
 , settings    ? settings'
 , maven       ? maven'
 , buildInputs ? []
-, remotes     ? getRemotes { inherit src maven settings; }
+
+# TODO: replace `remotes` default value with output from:
+# `getRemotes { inherit src maven settings; }`
+, remotes     ? { central = "https://repo.maven.apache.org/maven2"; }
+
 , doCheck     ? true
 , debug       ? false
 , ...
@@ -173,7 +177,6 @@ in config'@{
 in {
   inherit emptyRepo repo remotes deps infoFile maven settings config;
   build = lib.makeOverridable stdenv.mkDerivation ({
-    inherit src;
     name = info.name;
 
     checkPhase = ''

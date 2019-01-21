@@ -14,7 +14,7 @@ let
     }: mavenix {
       inherit src doCheck;
       infoFile = ./%%info%%;
-      remotes = { central = "https://repo.maven.apache.org/maven2"; };
+      # remotes = { central = "https://repo.maven.apache.org/maven2"; };
       # settings = ./settings.xml;
       # deps = [ { path = "org/extra/dependencies"; sha1 = ""; } ];
       # drvs = [ ];
