@@ -36,7 +36,7 @@ let
     mkdir -p "${path}"
     ( cd "${path}"
       ln -sfv "${writeText "maven-metadata.xml" content}" "${name}"
-      linkSnapshot < "${name}" )
+      linkSnapshot "${name}" )
   '');
 
   drvToScript = drv: ''
@@ -90,7 +90,9 @@ let
     }
 
     linkSnapshot() {
-      ${yq}/bin/xq -r '
+      [ "$(${yq}/bin/xq '.metadata.versioning.snapshotVersions' < "$1")" == "null" ] \
+        && return
+      cat "$1" | ${yq}/bin/xq -r '
         .metadata as $o
           | [.metadata.versioning.snapshotVersions.snapshotVersion] | flatten | .[]
           | ((if .classifier? then ("-" + .classifier) else "" end) + "." + .extension) as $e
