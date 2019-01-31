@@ -61,7 +61,7 @@ let
     for prop in $props; do getMavenPathFromProperties $prop; done
   '';
 
-  transInfo = map (drv: importJSON "${drv}/share/java/mavenix-info.json");
+  transInfo = map (drv: importJSON "${drv}/share/java/mavenix.lock");
 
   transDeps = tinfo: concatLists (map (info: info.deps) tinfo);
   transMetas = tinfo: concatLists (map (info: info.metas) tinfo);
@@ -237,7 +237,7 @@ let
           dir="$out/share/java"
           mkdir -p $dir
 
-          cp ${infoFile} $dir/mavenix-info.json
+          cp ${infoFile} $dir/mavenix.lock
 
           ${optionalString (info?submodules) (concatStrings (mapmap
             [ cp-artifact cp-pom mk-properties mk-maven-metadata ]
@@ -253,11 +253,12 @@ let
         mavenixMeta = toJSON {
           inherit deps emptyRepo settings;
           infoFile = toString infoFile;
+          srcPath = toString src;
         };
       }))
   );
-in {
-  name = "mavenix";
+in rec {
   version = "0.2.0";
+  name = "mavenix-${version}";
   inherit buildMaven pkgs;
 }

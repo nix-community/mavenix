@@ -4,7 +4,13 @@ set -e
 usage() {
   test "$1" && echo -e Error: $1\\n || echo -n
   cat <<EOF
-  Usage: $(basename $0) <NIX-FILE>
+  Usage: $(basename $0) [OPTIONS] [<NIX-FILE>]
+
+  OPTIONS
+    --save-repo|-s <path>    Specify path to save maven repo to. This will
+                               speed up consecutive runs, but might affect
+                               lock file if POM is changed in between.
+    --verbose|-v             Verbose output
 EOF
   exit 1
 }
@@ -19,9 +25,9 @@ config="."
 tmp_repo="$WORK_DIR/m2-repo"
 
 # Parse CLI arguments
-while test $1;do
-  case $1 in
-    -d|--debug) debug=1;set -x;;
+while test "$1";do
+  case "$1" in
+    -v|--verbose) verbose=1;set -x;;
     -s|--save-repo) shift;tmp_repo="$1";;
     -*) usage;;
     *) config="$1";;
@@ -30,22 +36,36 @@ while test $1;do
 done
 
 config="$(realpath "$config")"
+tmp_repo="$(realpath "$tmp_repo")"
 mkdir -p "$tmp_repo"
 
-ns_() { HOME="/tmp/nowhere" nix-shell --show-trace --pure --run "$*" -E "(import \"$config\" {}).override { update = true; }"; }
+ns_() {
+  local ns_wd="$1";shift
+  HOME="/tmp/nowhere" nix-shell --show-trace --pure \
+    --run "cd \"$ns_wd\"; $*" -E "(import \"$config\" {}).override { update = true; }";
+}
 
 echo >&2 "
   Getting mavenix meta data...
 "
-mavenixMeta="$(ns_ echo '$mavenixMeta')"
+mavenixMeta="$(ns_ . echo '$mavenixMeta')"
 mq() { jq -rc "$1" <<<"$mavenixMeta"; }
 
 cp -rf $(mq .emptyRepo)/* "$tmp_repo" >/dev/null 2>&1 || true
-chmod -R +w "$tmp_repo" || true #echo >&2 Failed to set chmod on temp repo dir.
+chmod -R u+w "$tmp_repo" || true #echo >&2 Failed to set chmod on temp repo dir.
 
-mvn_flags="$(test "$debug" && printf %s "-e -X" || true)"
-mvn_() { ns_ mvn $mvn_flags -B -nsu --settings "$(mq .settings)" "$@"; }
-mvn_out() { ns_ mvn -B -nsu --settings "$(mq .settings)" "$@"; }
+settings="$(mq .settings)"
+src_path="$(mq .srcPath)"
+src_wd="$src_path"
+if test ! -w "$src_wd"; then
+  src_wd="$WORK_DIR/src"
+  cp -r "$src_path" "$src_wd"
+  chmod -R u+w "$src_wd" || true #echo >&2 Failed to set chmod on temp repo dir.
+fi
+
+mvn_flags="$(test "$verbose" && printf %s "-e -X" || true)"
+mvn_() { ns_ "$src_wd" mvn $mvn_flags -B -nsu --settings "$settings" "$@"; }
+mvn_out() { ns_ "$src_wd" mvn -B -nsu --settings "$settings" "$@"; }
 
 echo >&2 "
   Running mvn package...
@@ -64,12 +84,25 @@ groupId="$(pq .[0].groupId)"
 artifactId="$(pq .[0].artifactId)"
 version="$(pq .[0].version)"
 
-modules="$(pq '[.[] | {name: (.artifactId + "-" + .version), groupId, artifactId, version, path: (.build.directory | sub("^'$PWD'/"; "./") | sub("/target"; ""))}]')"
+modules="$(pq '
+  [ .[]
+    | {
+      name: (.artifactId + "-" + .version),
+      groupId, artifactId, version,
+      path: (.build.directory | sub("^'$src_wd'/"; "./") | sub("/target"; ""))
+    }
+  ]
+')"
 
-remotes_repos="$(pq '[.[].repositories.repository[] | {(.id):.url}] | add')"
+remotes_repos="$(pq '
+  [ [.[].repositories.repository, .[].pluginRepositories.pluginRepository]
+    | flatten | .[]
+    | {(.id):.url}
+  ] | add
+')"
 
-tmp_output="$WORK_DIR/tmp-mavenix-info.json"
-output="$(mq .infoFile)"
+tmp_lock_file="$WORK_DIR/tmp-mavenix.lock"
+lock_file="$(mq .infoFile)"
 
 echo >&2 "
   Resolving maven dependencies...
@@ -126,15 +159,15 @@ echo -n "
   \"remotes\": $remotes_repos
 }
 "
-) > "$tmp_output"
+) > "$tmp_lock_file"
 
 
 echo >&2 "
   Sanity check...
 "
-jq -c . < "$tmp_output" > /dev/null
-mv "$tmp_output" "$output"
+jq -c . < "$tmp_lock_file" > /dev/null
+mv "$tmp_lock_file" "$lock_file"
 
 echo >&2 "
-  Lock file created at: $output
+  Lock file created at: $lock_file
 "

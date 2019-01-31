@@ -4,11 +4,11 @@ set -e
 usage() {
   test "$1" && echo -e Error: $1\\n || echo -n
   cat >&2 <<EOF
-  Usage: $(basename $0) [OPTIONS] <OUTPUT-NIX-FILE>
+  Usage: $(basename $0) [OPTIONS] [<NIX-FILE>]
 
   OPTIONS
-    --output|-o <dir>       Generated nix files output directory
-    --debug|-d              Debug mode
+    --output|-o <dir>        Generated files output directory
+    --verbose|-v             Verbose output
 EOF
   exit 1
 }
@@ -19,13 +19,14 @@ tmpl() { sed "s|%%$1%%|$2|g"; }
 outputDir="."
 
 # Parse CLI arguments
-while test $1;do
-  case $1 in
-    -o|--output) outputDir="$2";shift 2;;
-    -d|--debug) set -x;shift;;
+while test "$1";do
+  case "$1" in
+    -o|--output) shift;outputDir="$1";;
+    -v|--verbose) set -x;;
     -*) usage;;
-    *) config="$1";shift;;
+    *) config="$1";;
   esac
+  shift
 done
 
 mkdir -p "$outputDir"
@@ -34,7 +35,7 @@ config="${config-$outputDir/default.nix}"
 
 relSrc="$(realpath --relative-to="$(dirname $config)" ".")"
 relEnv="$(realpath --relative-to="$(dirname $config)" "$outputDir/mavenix.nix")"
-relInfo="$(realpath --relative-to="$(dirname $config)" "$outputDir/mavenix-info.json")"
+relInfo="$(realpath --relative-to="$(dirname $config)" "$outputDir/mavenix.lock")"
 
 copy() { cp "$1" "$2"; echo "$2"; }
 echo >&2 "
@@ -47,10 +48,10 @@ copy <(cat "$CONFIG_TEMPLATE" \
 ) "$config"
 copy "$MAVENIX_SCRIPT" "$outputDir/mavenix.nix"
 chmod u+w "$outputDir/mavenix.nix"
-copy <(echo -e '{"name":"","deps":[],"metas":[]}') "$outputDir/mavenix-info.json"
+copy <(echo -e '{"name":"","deps":[],"metas":[]}') "$outputDir/mavenix.lock"
 
 echo >&2 "
-  Edit the file '$config'
-  To capture dependencies run: 'mvnix-update'
-  Then build with: 'nix-build $config -A build'
+  1. Configure by editing '$config'
+  2. Update lock file by running 'mvnix-update \"$config\"'
+  3. Build your project 'nix-build \"$config\"'
 "
