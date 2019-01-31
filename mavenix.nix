@@ -1,10 +1,23 @@
-{ stdenv, lib, runCommand, fetchurl, makeWrapper, maven, writeText
-, requireFile, yq
+let
+  fetcher = { owner, repo, rev, sha256 }: builtins.fetchTarball {
+    inherit sha256;
+    url = "https://github.com/${owner}/${repo}/archive/${rev}.tar.gz";
+  };
+in {
+  pkgs ? import (fetcher {
+    owner   = "NixOS";
+    repo    = "nixpkgs";
+    rev     = "18.09";
+    sha256  = "1ib96has10v5nr6bzf7v8kw7yzww8zanxgw2qi1ll1sbv6kj6zpd";
+  }) {},
 }:
 
 let
-  inherit (builtins) attrNames attrValues pathExists toPath;
-  inherit (lib) concatLists concatStrings importJSON strings;
+  inherit (builtins) attrNames attrValues pathExists toJSON;
+  inherit (pkgs) stdenv runCommand fetchurl makeWrapper maven writeText
+     requireFile yq;
+  inherit (pkgs.lib) concatLists concatStrings importJSON strings;
+
   maven' = maven;
   settings' = writeText "settings.xml" ''
     <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
@@ -148,35 +161,34 @@ let
     </metadata>
     ' > $dir/${submod.name}.metadata.xml
   '';
-in config'@{
-  src
-, infoFile
-, deps        ? []
-, drvs        ? []
-, settings    ? settings'
-, maven       ? maven'
-, buildInputs ? []
 
-# TODO: replace `remotes` default value with output from:
-# `getRemotes { inherit src maven settings; }`
-, remotes     ? { central = "https://repo.maven.apache.org/maven2"; }
+  buildMaven = {
+    src,
+    infoFile,
+    deps        ? [],
+    drvs        ? [],
+    settings    ? settings',
+    maven       ? maven',
+    buildInputs ? [],
 
-, doCheck     ? true
-, debug       ? false
-, ...
-}: let
-  config = config' // {
-    buildInputs = buildInputs ++ [ maven ];
-  };
-  info = importJSON infoFile;
-  repo = mkRepo {
-    inherit (info) deps metas;
-    inherit drvs remotes;
-  };
-  emptyRepo = mkRepo { inherit drvs remotes; };
-in {
-  inherit emptyRepo repo remotes deps infoFile maven settings config;
-  build = lib.makeOverridable stdenv.mkDerivation ({
+    # TODO: replace `remotes` default value with output from:
+    # `getRemotes { inherit src maven settings; }`
+    remotes     ? { central = "https://repo.maven.apache.org/maven2"; },
+
+    doCheck     ? true,
+    debug       ? false,
+    ...
+  }@config': let
+    config = config' // {
+      buildInputs = buildInputs ++ [ maven ];
+    };
+    info = importJSON infoFile;
+    repo = mkRepo {
+      inherit (info) deps metas;
+      inherit drvs remotes;
+    };
+    emptyRepo = mkRepo { inherit drvs remotes; };
+  in stdenv.mkDerivation ({
     name = info.name;
 
     checkPhase = ''
@@ -215,5 +227,13 @@ in {
     deps = null;
     drvs = null;
     remotes = null;
+    mavenixMeta = toJSON {
+      inherit deps emptyRepo settings;
+      infoFile = toString infoFile;
+    };
   }));
+in {
+  name = "mavenix";
+  version = "0.2.0";
+  inherit buildMaven pkgs;
 }

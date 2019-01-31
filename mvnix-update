@@ -10,7 +10,7 @@ EOF
 }
 
 # Default values
-config="default.nix"
+config="."
 
 # Parse CLI arguments
 while test $1;do
@@ -21,22 +21,13 @@ while test $1;do
   esac
 done
 
-eval-env() {
-  nix-instantiate 2>&- --eval \
-    -E "let env = import \"$(realpath "$config")\" {}; in toString ($1)" \
-  | sed 's/^"//;s/"$//'
-}
-build-env() {
-  nix-build --no-out-link \
-    -E "let env = import \"$(realpath "$config")\" {}; in ($1)"
-}
+config="$(realpath "$config")"
 
-initRepo=$(build-env env.emptyRepo)
-output=$(eval-env env.infoFile)
-settings=$(build-env env.settings)
-build_inputs=$(eval-env '(import <nixpkgs> {}).lib.makeBinPath env.config.buildInputs')
-extra_deps=$(sed 's/^\[//;s/\]$//;s/\(.\)$/\1,/' \
-  $(build-env '(import <nixpkgs> {}).writeText "extra-deps.json" (builtins.toJSON env.deps)'))
+ns_() { HOME="/tmp/nowhere" nix-shell --show-trace --pure --run "$*" "$config"; }
+
+echo >&2 "GETTING MAVENIX META DATA"
+mavenixMeta="$(ns_ echo '$mavenixMeta')"
+mq() { jq -rc "$1" <<<"$mavenixMeta"; }
 
 TMP_REPO="$(mktemp -d --tmpdir mavenix-m2-repo.XXXXXX)"
 cleanup() {
@@ -44,15 +35,12 @@ cleanup() {
 }
 trap "trap - TERM; cleanup; kill -- $$" EXIT INT TERM
 
-cp -rf $initRepo/* $TMP_REPO >/dev/null 2>&1 || true
+cp -rf $(mq .emptyRepo)/* $TMP_REPO >/dev/null 2>&1 || true
 chmod -R +w "$TMP_REPO" || echo >&2 Failed to set chmod on temp repo dir.
 
 mvn_flags="$(test "$debug" && printf %s "-e -X" || true)"
-mvn_() { mvn $mvn_flags -B -nsu --settings "$settings" "$@"; }
-mvn_out() { mvn -B -nsu --settings "$settings" "$@"; }
-
-echo >&2 "ADDING BUILD INPUTS TO \$PATH"
-export PATH="$build_inputs:$PATH"
+mvn_() { ns_ mvn $mvn_flags -B -nsu --settings "$(mq .settings)" "$@"; }
+mvn_out() { ns_ mvn -B -nsu --settings "$(mq .settings)" "$@"; }
 
 echo >&2 "RUNNING MAVEN PACKAGE"
 mvn_ >&2 package -Dmaven.test.skip.exec=true -DskipTests -Dmaven.repo.local=${TMP_REPO}
@@ -80,7 +68,7 @@ echo -n "{
   \"artifactId\": \"$artifactId\",
   \"version\": \"$version\",
   \"submodules\": $modules,
-  \"deps\": [ $extra_deps"
+  \"deps\": [ $(mq .deps[] | sed 's/\(.\)$/\1,/')"
 ( cd $TMP_REPO
 remotes="$(find . -type f -name "*.repositories" | sed 's|^\./||' | sort)"
 sep=""
@@ -119,4 +107,4 @@ echo -n "
   ]
 }
 "
-) > "$output"
+) > "$(mq .infoFile)"
