@@ -13,10 +13,11 @@ in {
 }:
 
 let
-  inherit (builtins) attrNames attrValues pathExists toJSON;
+  inherit (builtins) attrNames attrValues pathExists toJSON foldl';
   inherit (pkgs) stdenv runCommand fetchurl makeWrapper maven writeText
-     requireFile yq;
-  inherit (pkgs.lib) concatLists concatStrings importJSON strings;
+    requireFile yq;
+  inherit (pkgs.lib) concatLists concatStrings importJSON strings
+    makeOverridable optionalAttrs optionalString;
 
   maven' = maven;
   settings' = writeText "settings.xml" ''
@@ -29,28 +30,30 @@ let
 
   mapmap = fs: ls: concatLists (map (v: map (f: f v) fs) ls);
 
-  urlToScript = (remotes: dep: let
-    inherit (dep) path sha1;
-    authenticated = if dep?authenticated then dep.authenticated else false;
+  urlToScript = remotes: dep:
+    let
+      inherit (dep) path sha1;
+      authenticated = if dep?authenticated then dep.authenticated else false;
 
-    fetch = (if authenticated then requireFile else fetchurl) {
-      inherit sha1;
-      urls = map (r: "${r}/${path}") (attrValues remotes);
-    };
-  in ''
-    mkdir -p "$(dirname ${path})"
-    ln -sfv "${fetch}" "${path}"
-  '');
+      fetch = (if authenticated then requireFile else fetchurl) {
+        inherit sha1;
+        urls = map (r: "${r}/${path}") (attrValues remotes);
+      };
+    in ''
+      mkdir -p "$(dirname ${path})"
+      ln -sfv "${fetch}" "${path}"
+    '';
 
-  metadataToScript = (remote: meta: let
-    inherit (meta) path content;
-    name = "maven-metadata-${remote}.xml";
-  in ''
-    mkdir -p "${path}"
-    ( cd "${path}"
-      ln -sfv "${writeText "maven-metadata.xml" content}" "${name}"
-      linkSnapshot "${name}" )
-  '');
+  metadataToScript = remote: meta:
+    let
+      inherit (meta) path content;
+      name = "maven-metadata-${remote}.xml";
+    in ''
+      mkdir -p "${path}"
+      ( cd "${path}"
+        ln -sfv "${writeText "maven-metadata.xml" content}" "${name}"
+        linkSnapshot "${name}" )
+    '';
 
   drvToScript = drv: ''
     echo >&2 BUILDING FROM DERIVATION
@@ -58,41 +61,48 @@ let
     for prop in $props; do getMavenPathFromProperties $prop; done
   '';
 
-  transDeps = drvs: concatLists (map
-    (drv: (importJSON "${drv}/share/java/mavenix-info.json").deps)
-    drvs
-  );
+  transInfo = map (drv: importJSON "${drv}/share/java/mavenix-info.json");
 
-  transMetas = drvs: concatLists (map
-    (drv: (importJSON "${drv}/share/java/mavenix-info.json").metas)
-    drvs
-  );
+  transDeps = tinfo: concatLists (map (info: info.deps) tinfo);
+  transMetas = tinfo: concatLists (map (info: info.metas) tinfo);
+  transRemotes = foldl' (acc: info: acc // info.remotes) {};
 
-  getRemotes = { src, maven, settings ? settings' }:
-    importJSON (stdenv.mkDerivation {
-      inherit src;
-      name = "remotes.json";
-      phases = [ "unpackPhase" "installPhase" ];
-      installPhase = ''
-        parse() {
-          local sep=""
-          echo "{"
-          while test "$1"; do
-            echo "$sep\"$1\":\"$2\""
-            sep=","
-            shift 2
-          done
-          echo "}"
-        }
-        parse $(
-          ${maven}/bin/mvn 2>&- -B -nsu --offline --settings "${settings}" \
-            dependency:list-repositories \
-          | sed -n 's/.* \(id\|url\)://p' | tr -d '\n'
-        ) > $out
-      '';
-    });
+  #getRemotes = { src, maven, settings ? settings' }:
+  #  importJSON (stdenv.mkDerivation {
+  #    inherit src;
+  #    name = "remotes.json";
+  #    phases = [ "unpackPhase" "installPhase" ];
+  #    installPhase = ''
+  #      parse() {
+  #        local sep=""
+  #        echo "{"
+  #        while test "$1"; do
+  #          echo "$sep\"$1\":\"$2\""
+  #          sep=","
+  #          shift 2
+  #        done
+  #        echo "}"
+  #      }
+  #      parse $(
+  #        ${maven}/bin/mvn 2>&- -B -nsu --offline --settings "${settings}" \
+  #          dependency:list-repositories \
+  #        | sed -n 's/.* \(id\|url\)://p' | tr -d '\n'
+  #      ) > $out
+  #    '';
+  #  });
 
-  mkRepo = { remotes ? {}, drvs ? [], deps ? [], metas ? [] }: runCommand "mk-repo" {} ''
+  mkRepo = {
+    deps ? [],
+    metas ? [],
+    remotes ? {},
+    drvs ? [],
+    drvsInfo ? [],
+  }:
+    let
+      deps' = deps ++ (transDeps drvsInfo);
+      metas' = metas ++ (transMetas drvsInfo);
+      remotes' = (transRemotes drvsInfo) // remotes;
+  in runCommand "mk-repo" {} ''
     set -e
 
     getMavenPath() {
@@ -129,9 +139,9 @@ let
 
     mkdir -p "$out"
     (cd $out
-      ${concatStrings (map (urlToScript remotes) (deps ++ (transDeps drvs)))}
+      ${concatStrings (map (urlToScript remotes') deps')}
       ${concatStrings (mapmap
-        (map metadataToScript (attrNames remotes)) (metas ++ (transMetas drvs)))}
+        (map metadataToScript (attrNames remotes')) metas')}
       ${concatStrings (map drvToScript drvs)}
     )
   '';
@@ -162,7 +172,7 @@ let
     ' > $dir/${submod.name}.metadata.xml
   '';
 
-  buildMaven = {
+  buildMaven = makeOverridable ({
     src,
     infoFile,
     deps        ? [],
@@ -173,65 +183,79 @@ let
 
     # TODO: replace `remotes` default value with output from:
     # `getRemotes { inherit src maven settings; }`
-    remotes     ? { central = "https://repo.maven.apache.org/maven2"; },
+    remotes     ? {},
 
     doCheck     ? true,
     debug       ? false,
+    update      ? false,
     ...
-  }@config': let
-    config = config' // {
-      buildInputs = buildInputs ++ [ maven ];
-    };
-    info = importJSON infoFile;
-    repo = mkRepo {
-      inherit (info) deps metas;
-      inherit drvs remotes;
-    };
-    emptyRepo = mkRepo { inherit drvs remotes; };
-  in stdenv.mkDerivation ({
-    name = info.name;
+  }@config':
+    let
+      dummy-info = { name = "update"; deps = []; metas = []; };
 
-    checkPhase = ''
-      runHook preCheck
+      config = config' // {
+        buildInputs = buildInputs ++ [ maven ];
+      };
+      info = if update then dummy-info else importJSON infoFile;
+      remotes' = (optionalAttrs (info?remotes) info.remotes) // remotes;
+      drvsInfo = transInfo drvs;
 
-      mvn --offline -B --settings ${settings} -Dmaven.repo.local=${repo} -nsu test
+      emptyRepo = mkRepo {
+        inherit drvs drvsInfo;
+        remotes = remotes';
+      };
 
-      runHook postCheck
-    '';
+      repo = mkRepo {
+        inherit (info) deps metas;
+        inherit drvs drvsInfo;
+        remotes = remotes';
+      };
+    in
+      stdenv.mkDerivation ({
+        name = info.name;
 
-    buildPhase = ''
-      runHook preBuild
+        checkPhase = ''
+          runHook preCheck
 
-      mvn --offline -B -version -Dmaven.repo.local=${repo}
-      mvn --offline -B --settings ${settings} -Dmaven.repo.local=${repo} -nsu package -DskipTests=true -Dmaven.test.skip=true
+          mvn --offline -B --settings ${settings} -Dmaven.repo.local=${repo} -nsu test
 
-      runHook postBuild
-    '';
+          runHook postCheck
+        '';
 
-    installPhase = ''
-      runHook preInstall
+        buildPhase = ''
+          runHook preBuild
 
-      dir="$out/share/java"
-      mkdir -p $dir
+          mvn --offline -B -version -Dmaven.repo.local=${repo}
+          mvn --offline -B --settings ${settings} -Dmaven.repo.local=${repo} -nsu package -DskipTests=true -Dmaven.test.skip=true
 
-      cp ${infoFile} $dir/mavenix-info.json
+          runHook postBuild
+        '';
 
-      ${concatStrings (mapmap
-        [ cp-artifact cp-pom mk-properties mk-maven-metadata ]
-        info.submodules
-      )}
+        installPhase = ''
+          runHook preInstall
 
-      runHook postInstall
-    '';
-  } // (config // {
-    deps = null;
-    drvs = null;
-    remotes = null;
-    mavenixMeta = toJSON {
-      inherit deps emptyRepo settings;
-      infoFile = toString infoFile;
-    };
-  }));
+          dir="$out/share/java"
+          mkdir -p $dir
+
+          cp ${infoFile} $dir/mavenix-info.json
+
+          ${optionalString (info?submodules) (concatStrings (mapmap
+            [ cp-artifact cp-pom mk-properties mk-maven-metadata ]
+            info.submodules
+          ))}
+
+          runHook postInstall
+        '';
+      } // (config // {
+        deps = null;
+        drvs = null;
+        remotes = null;
+        mavenixMeta = toJSON {
+          inherit deps emptyRepo settings;
+          infoFile = toString infoFile;
+        };
+      }))
+  );
 in {
   name = "mavenix";
   version = "0.2.0";

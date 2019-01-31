@@ -16,13 +16,22 @@ let
       doCheck ? false,
     }: mavenix.buildMaven {
       inherit src doCheck;
-      infoFile = ./%%info%%;
+      infoFile = toString ./%%info%%;
+
+      # Add build dependencies
+      #   buildInputs = with pkgs; [ git ];
+
+      # Add extra maven dependencies
+      #   deps = [ { path = "org/group-id/artifactId/version/file"; sha1 = "0123456789abcdef"; } ];
+
+      # Add dependencies on other mavenix derivations
+      #   drvs = [ (import ../other/mavenix/derivation {}) ];
+
+      # Override which maven package to build with
+      #   maven = maven.override { jdk = pkgs.oraclejdk10; };
+
       # remotes = { central = "https://repo.maven.apache.org/maven2"; };
       # settings = ./settings.xml;
-      # deps = [ { path = "org/extra/dependencies"; sha1 = "0123456789abcdef"; } ];
-      # drvs = [ (import ../other/mavenix/derivation {}) ];
-      # buildInputs = with pkgs; [ git ];
-      # maven = maven.override { jdk = pkgs.oraclejdk10; };
     }
   '';
 in stdenv.mkDerivation {

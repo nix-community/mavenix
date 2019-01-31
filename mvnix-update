@@ -9,43 +9,52 @@ EOF
   exit 1
 }
 
+# Setup work dir and cleanup
+WORK_DIR="$(mktemp -d --tmpdir mvnix-update.XXXXXX)"
+cleanup() { rm -rf "$WORK_DIR" || true; }
+trap "trap - TERM; cleanup; kill -- $$" EXIT INT TERM
+
 # Default values
 config="."
+tmp_repo="$WORK_DIR/m2-repo"
 
 # Parse CLI arguments
 while test $1;do
   case $1 in
-    -d|--debug) debug=1;set -x;shift;;
+    -d|--debug) debug=1;set -x;;
+    -s|--save-repo) shift;tmp_repo="$1";;
     -*) usage;;
-    *) config="$1";shift;;
+    *) config="$1";;
   esac
+  shift
 done
 
 config="$(realpath "$config")"
+mkdir -p "$tmp_repo"
 
-ns_() { HOME="/tmp/nowhere" nix-shell --show-trace --pure --run "$*" "$config"; }
+ns_() { HOME="/tmp/nowhere" nix-shell --show-trace --pure --run "$*" -E "(import \"$config\" {}).override { update = true; }"; }
 
-echo >&2 "GETTING MAVENIX META DATA"
+echo >&2 "
+  Getting mavenix meta data...
+"
 mavenixMeta="$(ns_ echo '$mavenixMeta')"
 mq() { jq -rc "$1" <<<"$mavenixMeta"; }
 
-TMP_REPO="$(mktemp -d --tmpdir mavenix-m2-repo.XXXXXX)"
-cleanup() {
-  rm -rf "$TMP_REPO" || echo -n
-}
-trap "trap - TERM; cleanup; kill -- $$" EXIT INT TERM
-
-cp -rf $(mq .emptyRepo)/* $TMP_REPO >/dev/null 2>&1 || true
-chmod -R +w "$TMP_REPO" || echo >&2 Failed to set chmod on temp repo dir.
+cp -rf $(mq .emptyRepo)/* "$tmp_repo" >/dev/null 2>&1 || true
+chmod -R +w "$tmp_repo" || true #echo >&2 Failed to set chmod on temp repo dir.
 
 mvn_flags="$(test "$debug" && printf %s "-e -X" || true)"
 mvn_() { ns_ mvn $mvn_flags -B -nsu --settings "$(mq .settings)" "$@"; }
 mvn_out() { ns_ mvn -B -nsu --settings "$(mq .settings)" "$@"; }
 
-echo >&2 "RUNNING MAVEN PACKAGE"
-mvn_ >&2 package -Dmaven.test.skip.exec=true -DskipTests -Dmaven.repo.local=${TMP_REPO}
+echo >&2 "
+  Running mvn package...
+"
+mvn_ >&2 package -Dmaven.test.skip.exec=true -DskipTests -Dmaven.repo.local="$tmp_repo"
 
-echo >&2 "GETTING PROJECT INFO"
+echo >&2 "
+  Getting project info...
+"
 pom="$(mvn_out help:effective-pom | grep -v '^\[\|^Effective \|^$' | xq -c .)"
 projects="$(jq -c '.projects.project // [.project]' <<<"$pom")"
 pq() { jq -rc "$1" <<<"$projects"; }
@@ -57,10 +66,19 @@ version="$(pq .[0].version)"
 
 modules="$(pq '[.[] | {name: (.artifactId + "-" + .version), groupId, artifactId, version, path: (.build.directory | sub("^'$PWD'/"; "./") | sub("/target"; ""))}]')"
 
-echo >&2 "RESOLVING MAVEN DEPENDENCIES"
-mvn_ >&2 dependency:go-offline -Dmaven.repo.local=${TMP_REPO}
+remotes_repos="$(pq '[.[].repositories.repository[] | {(.id):.url}] | add')"
 
-echo >&2 "CREATING OUTPUT"
+tmp_output="$WORK_DIR/tmp-mavenix-info.json"
+output="$(mq .infoFile)"
+
+echo >&2 "
+  Resolving maven dependencies...
+"
+mvn_ >&2 dependency:go-offline -Dmaven.repo.local="$tmp_repo"
+
+echo >&2 "
+  Creating lock file...
+"
 (
 echo -n "{
   \"name\": \"$artifactId-$version\",
@@ -69,7 +87,7 @@ echo -n "{
   \"version\": \"$version\",
   \"submodules\": $modules,
   \"deps\": [ $(mq .deps[] | sed 's/\(.\)$/\1,/')"
-( cd $TMP_REPO
+( cd $tmp_repo
 remotes="$(find . -type f -name "*.repositories" | sed 's|^\./||' | sort)"
 sep=""
 for remote in $remotes; do
@@ -104,7 +122,19 @@ for file in $metafiles; do
 done
 )
 echo -n "
-  ]
+  ],
+  \"remotes\": $remotes_repos
 }
 "
-) > "$(mq .infoFile)"
+) > "$tmp_output"
+
+
+echo >&2 "
+  Sanity check...
+"
+jq -c . < "$tmp_output" > /dev/null
+mv "$tmp_output" "$output"
+
+echo >&2 "
+  Lock file created at: $output
+"
