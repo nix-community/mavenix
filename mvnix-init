@@ -4,7 +4,7 @@ set -e
 usage() {
   test "$1" && echo -e Error: $1\\n || echo -n
   cat >&2 <<EOF
-  Usage: $(basename $0) [OPTIONS] [<NIX-FILE>]
+  Usage: mvnix-init [OPTIONS] [<NIX-FILE>]
 
   OPTIONS
     --output|-o <dir>        Generated files output directory

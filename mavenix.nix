@@ -13,7 +13,7 @@ in {
 }:
 
 let
-  inherit (builtins) attrNames attrValues pathExists toJSON foldl';
+  inherit (builtins) attrNames attrValues pathExists toJSON foldl' elemAt;
   inherit (pkgs) stdenv runCommand fetchurl makeWrapper maven writeText
     requireFile yq;
   inherit (pkgs.lib) concatLists concatStrings importJSON strings
@@ -33,12 +33,15 @@ let
   urlToScript = remotes: dep:
     let
       inherit (dep) path sha1;
-      authenticated = if dep?authenticated then dep.authenticated else false;
+      authenticated = if (dep?authenticated) then dep.authenticated else false;
 
-      fetch = (if authenticated then requireFile else fetchurl) {
+      fetch = if authenticated then (requireFile {
+        inherit sha1;
+        url = "${elemAt (attrValues remotes) 0}/${path}";
+      }) else (fetchurl {
         inherit sha1;
         urls = map (r: "${r}/${path}") (attrValues remotes);
-      };
+      });
     in ''
       mkdir -p "$(dirname ${path})"
       ln -sfv "${fetch}" "${path}"
@@ -56,12 +59,12 @@ let
     '';
 
   drvToScript = drv: ''
-    echo >&2 BUILDING FROM DERIVATION
+    echo >&2 === building mavenix drvs: ${drv.name} ===
     props="${drv}/share/java/*.properties"
     for prop in $props; do getMavenPathFromProperties $prop; done
   '';
 
-  transInfo = map (drv: importJSON "${drv}/share/java/mavenix.lock");
+  transInfo = map (drv: importJSON "${drv}/share/mavenix/mavenix.lock");
 
   transDeps = tinfo: concatLists (map (info: info.deps) tinfo);
   transMetas = tinfo: concatLists (map (info: info.metas) tinfo);
@@ -214,6 +217,8 @@ let
       stdenv.mkDerivation ({
         name = info.name;
 
+        postPhases = [ "mavenixDistPhase" ];
+
         checkPhase = ''
           runHook preCheck
 
@@ -237,14 +242,18 @@ let
           dir="$out/share/java"
           mkdir -p $dir
 
-          cp ${infoFile} $dir/mavenix.lock
-
           ${optionalString (info?submodules) (concatStrings (mapmap
             [ cp-artifact cp-pom mk-properties mk-maven-metadata ]
             info.submodules
           ))}
 
           runHook postInstall
+        '';
+
+        mavenixDistPhase = ''
+          mkdir -p $out/share/mavenix
+          echo copying lock file
+          cp -v ${infoFile} $out/share/mavenix/mavenix.lock
         '';
       } // (config // {
         deps = null;

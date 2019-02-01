@@ -4,12 +4,13 @@ set -e
 usage() {
   test "$1" && echo -e Error: $1\\n || echo -n
   cat <<EOF
-  Usage: $(basename $0) [OPTIONS] [<NIX-FILE>]
+  Usage: mvnix-update [OPTIONS] [<NIX-FILE>]
 
   OPTIONS
     --save-repo|-s <path>    Specify path to save maven repo to. This will
                                speed up consecutive runs, but might affect
                                lock file if POM is changed in between.
+    --no-add|-n              Don't add dependencies to nix store
     --verbose|-v             Verbose output
 EOF
   exit 1
@@ -27,8 +28,9 @@ tmp_repo="$WORK_DIR/m2-repo"
 # Parse CLI arguments
 while test "$1";do
   case "$1" in
-    -v|--verbose) verbose=1;set -x;;
     -s|--save-repo) shift;tmp_repo="$1";;
+    -n|--no-add) no_add=1;;
+    -v|--verbose) verbose=1;set -x;;
     -*) usage;;
     *) config="$1";;
   esac
@@ -136,6 +138,8 @@ for remote in $remotes; do
     echo -n "$sep
     {\"path\":\"$file_real\",\"sha1\":\"$(grep -Eo '[0-9a-zA-Z]{40}' < $file_real.sha1)\"}"
     sep=","
+
+    test "$no_add" || nix-store --add-fixed sha1 "$file_real" >&2
   done
 done
 
