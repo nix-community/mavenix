@@ -7,11 +7,11 @@ usage() {
   Usage: mvnix-update [OPTIONS] [<NIX-FILE>]
 
   OPTIONS
-    --save-repo|-s <path>    Specify path to save maven repo to. This will
-                               speed up consecutive runs, but might affect
-                               lock file if POM is changed in between.
-    --no-add|-n              Don't add dependencies to nix store
-    --verbose|-v             Verbose output
+    -s, --save-repo <path>   Specify path to save maven repo to. This will
+                              speed up consecutive runs, but might affect
+                              lock file if POM is changed in between.
+    -n, --no-add             Don't add dependencies to nix store
+    -v, --verbose            Verbose output
 EOF
   exit 1
 }

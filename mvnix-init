@@ -7,8 +7,9 @@ usage() {
   Usage: mvnix-init [OPTIONS] [<NIX-FILE>]
 
   OPTIONS
-    --output|-o <dir>        Generated files output directory
-    --verbose|-v             Verbose output
+    -o, --output <dir>       Output directory for generated files
+    -c, --copy-src           Include mavenix.nix
+    -v, --verbose            Verbose output
 EOF
   exit 1
 }
@@ -22,6 +23,7 @@ outputDir="."
 while test "$1";do
   case "$1" in
     -o|--output) shift;outputDir="$1";;
+    -c|--copy-src) copy_src=1;;
     -v|--verbose) set -x;;
     -*) usage;;
     *) config="$1";;
@@ -34,21 +36,29 @@ config="${config-$outputDir/default.nix}"
 [ ! -e "$config" ] || usage "\"$config\" already exists"
 
 relSrc="$(realpath --relative-to="$(dirname $config)" ".")"
-relEnv="$(realpath --relative-to="$(dirname $config)" "$outputDir/mavenix.nix")"
 relInfo="$(realpath --relative-to="$(dirname $config)" "$outputDir/mavenix.lock")"
 
 copy() { cp "$1" "$2"; echo "$2"; }
 echo >&2 "
   Creating files:
 "
+
+if test "$copy_src"; then
+  relEnv="./$(realpath --relative-to="$(dirname $config)" "$outputDir/mavenix.nix")"
+  copy "$MAVENIX_SCRIPT" "$outputDir/mavenix.nix"
+  chmod u+w "$outputDir/mavenix.nix"
+else
+  relEnv="fetchTarball { url = \"$MAVENIX_DOWNLOAD\"; sha256 = \"$(nix-prefetch-url "$MAVENIX_DOWNLOAD" --unpack 2>&-)\"; }"
+fi
+
 copy <(cat "$CONFIG_TEMPLATE" \
 | tmpl src "$relSrc" \
 | tmpl env "$relEnv" \
 | tmpl info "$relInfo" \
 ) "$config"
-copy "$MAVENIX_SCRIPT" "$outputDir/mavenix.nix"
-chmod u+w "$outputDir/mavenix.nix"
+
 copy <(echo -e '{"name":"","deps":[],"metas":[]}') "$outputDir/mavenix.lock"
+
 
 echo >&2 "
   1. Configure by editing '$config'
