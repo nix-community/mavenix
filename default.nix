@@ -56,24 +56,30 @@ let
       #settings = ./settings.xml;
     }
   '';
-in stdenv.mkDerivation {
-  inherit name;
-  src = ./.;
-  buildInputs = [ makeWrapper ];
-  installPhase = ''
-    mkdir -p $out/bin
-    cp mvnix-init mvnix-update $out/bin
-    wrapProgram $out/bin/mvnix-init \
-      --set CONFIG_TEMPLATE ${default-tmpl} \
-      --set MAVENIX_SCRIPT  ${./mavenix.nix}
-    wrapProgram $out/bin/mvnix-update \
-      --prefix PATH : ${lib.makeBinPath [ yq nix mktemp ]}
-  '';
-  meta = with stdenv.lib; {
-    homepage = https://github.com/icetan/mavenix;
-    description = "Mavenix: deterministic builds for Maven using Nix?";
-    license = licenses.unlicense;
-    maintainers = [ { email = "me@icetan.org"; github = "icetan"; name = "Christopher Fredén"; } ];
-    platforms = [ "x86_64-linux" ];
+in mavenix // {
+  cli = stdenv.mkDerivation {
+    inherit name;
+    src = lib.cleanSource ./.;
+
+    buildInputs = [ makeWrapper ];
+
+    phases = [ "unpackPhase" "installPhase" ];
+    installPhase = ''
+      mkdir -p $out/bin
+      cp mvnix-init mvnix-update $out/bin
+      wrapProgram $out/bin/mvnix-init \
+        --set CONFIG_TEMPLATE ${default-tmpl} \
+        --set MAVENIX_SCRIPT  ${./mavenix.nix}
+      wrapProgram $out/bin/mvnix-update \
+        --prefix PATH : ${lib.makeBinPath [ yq nix mktemp coreutils ]}
+    '';
+
+    meta = with stdenv.lib; {
+      homepage = https://github.com/icetan/mavenix;
+      description = "Mavenix: deterministic builds for Maven using Nix?";
+      license = licenses.unlicense;
+      maintainers = [ { email = "me@icetan.org"; github = "icetan"; name = "Christopher Fredén"; } ];
+      platforms = [ "x86_64-linux" ];
+    };
   };
 }
