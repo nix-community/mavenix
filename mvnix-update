@@ -2,8 +2,8 @@
 set -e
 
 usage() {
-  test "$1" && echo -e Error: $1\\n || echo -n
-  cat <<EOF
+  test "$1" && echo -e Error: $1\\n || true
+  cat >&2 <<EOF
   Usage: mvnix-update [OPTIONS] [<NIX-FILE>]
 
   OPTIONS
@@ -12,6 +12,7 @@ usage() {
                               lock file if POM is changed in between.
     -n, --no-add             Don't add dependencies to nix store
     -v, --verbose            Verbose output
+    -h, --help               Print usage
 EOF
   exit 1
 }
@@ -22,29 +23,38 @@ cleanup() { rm -rf "$WORK_DIR" || true; }
 trap "trap - TERM; cleanup; kill -- $$" EXIT INT TERM
 
 # Default values
-config="."
+expression="import ./. {}"
 tmp_repo="$WORK_DIR/m2-repo"
 
 # Parse CLI arguments
 while test "$1";do
   case "$1" in
+    -E|--exp) shift;expression="$1";;
     -s|--save-repo) shift;tmp_repo="$1";;
     -n|--no-add) no_add=1;;
     -v|--verbose) verbose=1;set -x;;
-    -*) usage;;
+    -h|--help) usage;;
+    -*) usage "no option \"$1\"";;
     *) config="$1";;
   esac
   shift
 done
 
-config="$(realpath "$config")"
+die() { echo >&2 "$@"; exit 1;}
+
+if [[ "$expression" && "$config" ]]; then
+  die "Expression and file arguments are mutually exclusive"
+elif [[ "$config" ]]; then
+  expression="import \"$(realpath "$config")\" {}"
+fi
+
 tmp_repo="$(realpath "$tmp_repo")"
 mkdir -p "$tmp_repo"
 
 ns_() {
   local ns_wd="$1";shift
   HOME="/tmp/nowhere" nix-shell --show-trace --pure \
-    --run "cd \"$ns_wd\"; $*" -E "(import \"$config\" {}).override { update = true; }";
+    --run "cd \"$ns_wd\"; $*" -E "($expression).override { build = false; }";
 }
 
 echo >&2 "
@@ -52,6 +62,8 @@ echo >&2 "
 "
 mavenixMeta="$(ns_ . echo '$mavenixMeta')"
 mq() { jq -rc "$1" <<<"$mavenixMeta"; }
+
+test "$mavenixMeta" || die "Nix expression is not a mavenix derivation"
 
 cp -rf $(mq .emptyRepo)/* "$tmp_repo" >/dev/null 2>&1 || true
 chmod -R u+w "$tmp_repo" || true #echo >&2 Failed to set chmod on temp repo dir.

@@ -190,7 +190,7 @@ let
 
     doCheck     ? true,
     debug       ? false,
-    update      ? false,
+    build       ? true,
     ...
   }@config':
     let
@@ -199,7 +199,7 @@ let
       config = config' // {
         buildInputs = buildInputs ++ [ maven ];
       };
-      info = if update then dummy-info else importJSON infoFile;
+      info = if build then importJSON infoFile else dummy-info;
       remotes' = (optionalAttrs (info?remotes) info.remotes) // remotes;
       drvsInfo = transInfo drvs;
 
@@ -219,7 +219,7 @@ let
 
         postPhases = [ "mavenixDistPhase" ];
 
-        checkPhase = ''
+        checkPhase = optionalString build ''
           runHook preCheck
 
           mvn --offline -B --settings ${settings} -Dmaven.repo.local=${repo} -nsu test
@@ -227,7 +227,7 @@ let
           runHook postCheck
         '';
 
-        buildPhase = ''
+        buildPhase = optionalString build ''
           runHook preBuild
 
           mvn --offline -B -version -Dmaven.repo.local=${repo}
@@ -236,7 +236,7 @@ let
           runHook postBuild
         '';
 
-        installPhase = ''
+        installPhase = optionalString build ''
           runHook preInstall
 
           dir="$out/share/java"
@@ -250,7 +250,7 @@ let
           runHook postInstall
         '';
 
-        mavenixDistPhase = ''
+        mavenixDistPhase = optionalString build ''
           mkdir -p $out/share/mavenix
           echo copying lock file
           cp -v ${infoFile} $out/share/mavenix/mavenix.lock
@@ -259,6 +259,7 @@ let
         deps = null;
         drvs = null;
         remotes = null;
+        infoFile = null;
         mavenixMeta = toJSON {
           inherit deps emptyRepo settings;
           infoFile = toString infoFile;

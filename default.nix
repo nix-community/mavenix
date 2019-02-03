@@ -20,7 +20,7 @@ let
       doCheck ? false,
     }: mavenix.buildMaven {
       inherit src doCheck;
-      infoFile = ./%%info%%;
+      infoFile = ./mavenix.lock;
 
       # Add build dependencies
       #

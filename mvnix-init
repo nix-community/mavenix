@@ -2,7 +2,7 @@
 set -e
 
 usage() {
-  test "$1" && echo -e Error: $1\\n || echo -n
+  test "$1" && echo -e Error: $1\\n || true
   cat >&2 <<EOF
   Usage: mvnix-init [OPTIONS] [<NIX-FILE>]
 
@@ -10,6 +10,7 @@ usage() {
     -o, --output <dir>       Output directory for generated files
     -c, --copy-src           Include mavenix.nix
     -v, --verbose            Verbose output
+    -h, --help               Print usage
 EOF
   exit 1
 }
@@ -25,7 +26,8 @@ while test "$1";do
     -o|--output) shift;outputDir="$1";;
     -c|--copy-src) copy_src=1;;
     -v|--verbose) set -x;;
-    -*) usage;;
+    -h|--help) usage;;
+    -*) usage "no option \"$1\"";;
     *) config="$1";;
   esac
   shift
@@ -36,7 +38,6 @@ config="${config-$outputDir/default.nix}"
 [ ! -e "$config" ] || usage "\"$config\" already exists"
 
 relSrc="$(realpath --relative-to="$(dirname $config)" ".")"
-relInfo="$(realpath --relative-to="$(dirname $config)" "$outputDir/mavenix.lock")"
 
 copy() { cp "$1" "$2"; echo "$2"; }
 echo >&2 "
@@ -54,14 +55,10 @@ fi
 copy <(cat "$CONFIG_TEMPLATE" \
 | tmpl src "$relSrc" \
 | tmpl env "$relEnv" \
-| tmpl info "$relInfo" \
 ) "$config"
-
-copy <(echo -e '{"name":"","deps":[],"metas":[]}') "$outputDir/mavenix.lock"
-
 
 echo >&2 "
   1. Configure by editing '$config'
-  2. Update lock file by running 'mvnix-update \"$config\"'
+  2. Create a lock file by running 'mvnix-update \"$config\"'
   3. Build your project 'nix-build \"$config\"'
 "
