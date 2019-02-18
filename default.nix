@@ -67,7 +67,7 @@ in mavenix // {
 
     buildInputs = [ makeWrapper ];
 
-    phases = [ "unpackPhase" "installPhase" ];
+    phases = [ "unpackPhase" "installPhase" "fixupPhase" ];
     installPhase = ''
       mkdir -p $out/bin
       cp mvnix-init mvnix-update $out/bin
