@@ -77,7 +77,7 @@ in mavenix // {
         --set MAVENIX_DOWNLOAD ${download} \
         --prefix PATH : ${lib.makeBinPath [ nix coreutils yq ]}
       wrapProgram $out/bin/mvnix-update \
-        --prefix PATH : ${lib.makeBinPath [ nix coreutils yq mktemp ]}
+        --prefix PATH : ${lib.makeBinPath [ nix coreutils jq yq mktemp ]}
     '';
 
     meta = with stdenv.lib; {
