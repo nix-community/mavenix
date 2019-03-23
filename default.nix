@@ -1,6 +1,6 @@
 {
-  mavenix ? import ./mavenix.nix {},
-  pkgs ? mavenix.pkgs,
+  pkgs ? (import ./mavenix.nix {}).pkgs,
+  mavenix ? import ./mavenix.nix { inherit pkgs; },
 }: with pkgs;
 
 let
@@ -14,8 +14,8 @@ let
     let
       mavenix-src = %%env%%;
     in {
-      mavenix ? import mavenix-src {},
-      pkgs ? mavenix.pkgs,
+      pkgs ? (import mavenix-src {}).pkgs,
+      mavenix ? import mavenix-src { inherit pkgs; },
       src ? ./%%src%%,
       doCheck ? false,
     }: mavenix.buildMaven {
