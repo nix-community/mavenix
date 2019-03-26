@@ -197,7 +197,7 @@ let
       dummy-info = { name = "update"; deps = []; metas = []; };
 
       config = config' // {
-        buildInputs = buildInputs ++ [ maven ];
+        buildInputs = buildInputs ++ [ maven' ];
       };
       info = if build then importJSON infoFile else dummy-info;
       remotes' = (optionalAttrs (info?remotes) info.remotes) // remotes;
@@ -213,16 +213,30 @@ let
         inherit drvs drvsInfo;
         remotes = remotes';
       };
+
+      # Wrap mvn with settings to improve the nix-shell experience
+      maven' = runCommand "mvn" {
+        nativeBuildInputs = [ makeWrapper ];
+      } ''
+        mkdir -p $out/bin
+        makeWrapper ${maven}/bin/mvn $out/bin/mvn --add-flags "--settings ${settings}"
+      '';
+
+      mvn = "${maven'}/bin/mvn --offline --batch-mode -Dmaven.repo.local=${repo} -nsu ";
+
     in
       stdenv.mkDerivation ({
         name = info.name;
+
+        # Export as environment variable to make it possible to reuse default flags in other phases/hooks
+        inherit mvn;
 
         postPhases = [ "mavenixDistPhase" ];
 
         checkPhase = optionalString build ''
           runHook preCheck
 
-          mvn --offline -B --settings ${settings} -Dmaven.repo.local=${repo} -nsu test
+          $mvn test
 
           runHook postCheck
         '';
@@ -230,8 +244,8 @@ let
         buildPhase = optionalString build ''
           runHook preBuild
 
-          mvn --offline -B -version -Dmaven.repo.local=${repo}
-          mvn --offline -B --settings ${settings} -Dmaven.repo.local=${repo} -nsu package -DskipTests=true -Dmaven.test.skip=true
+          $mvn --version
+          $mvn package -DskipTests=true -Dmaven.test.skip=true
 
           runHook postBuild
         '';
