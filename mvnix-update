@@ -6,13 +6,15 @@ usage() {
   cat >&2 <<EOF
   Usage: mvnix-update [OPTIONS] [<NIX-FILE>]
 
-  OPTIONS
+  Options:
     -s, --save-repo <path>   Specify path to save maven repo to. This will
                               speed up consecutive runs, but might affect
                               lock file if POM is changed in between.
     -n, --no-add             Don't add dependencies to nix store
     -v, --verbose            Verbose output
     -h, --help               Print usage
+
+  Version: $MAVENIX_VERSION
 EOF
   exit 1
 }

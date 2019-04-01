@@ -75,8 +75,10 @@ in mavenix // {
         --set CONFIG_TEMPLATE  ${default-tmpl} \
         --set MAVENIX_SCRIPT   ${./mavenix.nix} \
         --set MAVENIX_DOWNLOAD ${download} \
+        --set MAVENIX_VERSION ${version} \
         --prefix PATH : ${lib.makeBinPath [ nix coreutils yq ]}
       wrapProgram $out/bin/mvnix-update \
+        --set MAVENIX_VERSION ${version} \
         --prefix PATH : ${lib.makeBinPath [ nix coreutils jq yq mktemp ]}
     '';
 

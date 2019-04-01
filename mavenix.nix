@@ -282,7 +282,7 @@ let
       }))
   );
 in rec {
-  version = "0.2.3";
+  version = "0.3.0";
   name = "mavenix-${version}";
   inherit buildMaven pkgs;
 }

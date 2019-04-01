@@ -6,11 +6,13 @@ usage() {
   cat >&2 <<EOF
   Usage: mvnix-init [OPTIONS] [<NIX-FILE>]
 
-  OPTIONS
+  Options:
     -o, --output <dir>       Output directory for generated files
     -c, --copy-src           Include mavenix.nix
     -v, --verbose            Verbose output
     -h, --help               Print usage
+
+  Version: $MAVENIX_VERSION
 EOF
   exit 1
 }
