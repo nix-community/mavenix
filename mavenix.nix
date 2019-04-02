@@ -284,5 +284,9 @@ let
 in rec {
   version = "0.3.0";
   name = "mavenix-${version}";
+  updateInfo = f: infoFile:
+    writeText "updated-lock" (
+      toJSON ((x: x // f x) (importJSON infoFile))
+    );
   inherit buildMaven pkgs;
 }
