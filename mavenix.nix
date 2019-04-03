@@ -151,7 +151,11 @@ let
     ' > $dir/${submod.name}.metadata.xml
   '';
 
-  buildMaven = makeOverridable ({
+  overrideOverrideAttrs = f: attrs: (f attrs) // {
+    overrideAttrs = f_: overrideOverrideAttrs f (attrs // (f_ attrs));
+  };
+
+  buildMaven = overrideOverrideAttrs ({
     src,
     infoFile,
     deps        ? [],

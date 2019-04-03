@@ -58,7 +58,7 @@ mkdir -p "$tmp_repo"
 ns_() {
   local ns_wd="$1";shift
   HOME="/tmp/nowhere" nix-shell --show-trace --pure \
-    --run "cd \"$ns_wd\"; $*" -E "($expression).override { build = false; }";
+    --run "cd \"$ns_wd\"; $*" -E "($expression).overrideAttrs (_: { build = false; })";
 }
 
 echo >&2 "
