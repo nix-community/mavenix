@@ -39,3 +39,19 @@ in order to update the derivation. E.g., if the derivation is the attribute `pkg
 ```sh
 mvnix-update -E "(import ./. {}).pkgset.pkg"
 ```
+
+### Packaging third-party projects
+
+If you are packaging a third-party Maven project you can specify a Nix
+expression that returns the source of that project.
+
+This makes it possible to generate a lock file without having to first
+manually clone the target project repository.
+
+E.g. generate and build a Nix package for Traccar v4.2:
+
+```sh
+mvnix-init -S 'fetchGit { url = git://github.com/traccar/traccar.git; ref = "v4.2"; }'
+mvnix-update
+nix-build
+```
