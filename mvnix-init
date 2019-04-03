@@ -10,6 +10,7 @@ usage() {
     -S, --src                A Nix expression to use as 'src' for derivation
     -o, --output <dir>       Output directory for generated files
     -c, --copy-src           Include mavenix.nix
+    -f, --force              Overwrite output file if exists
     -v, --verbose            Verbose output
     -h, --help               Print usage
 
@@ -29,6 +30,7 @@ while test "$1";do
     -S|--src) shift;srcExpr="$1";;
     -o|--output) shift;outputDir="$1";;
     -c|--copy-src) copy_src=1;;
+    -f|--force) forceOverwrite=1;;
     -v|--verbose) set -x;;
     -h|--help) usage;;
     -*) usage "no option \"$1\"";;
@@ -39,7 +41,7 @@ done
 
 mkdir -p "$outputDir"
 config="${config-$outputDir/default.nix}"
-[ ! -e "$config" ] || usage "\"$config\" already exists"
+[[ -n "$forceOverwrite" || ! -e "$config" ]] || usage "\"$config\" already exists"
 
 srcExpr="${srcExpr-./$(realpath --relative-to="$(dirname "$config")" ".")}"
 
