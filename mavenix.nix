@@ -30,17 +30,17 @@ let
 
   mapmap = fs: ls: concatLists (map (v: map (f: f v) fs) ls);
 
-  urlToScript = remotes: dep:
+  urlToScript = remoteList: dep:
     let
       inherit (dep) path sha1;
       authenticated = if (dep?authenticated) then dep.authenticated else false;
 
       fetch = if authenticated then (requireFile {
         inherit sha1;
-        url = "${elemAt (attrValues remotes) 0}/${path}";
+        url = "${elemAt remoteList 0}/${path}";
       }) else (fetchurl {
         inherit sha1;
-        urls = map (r: "${r}/${path}") (attrValues remotes);
+        urls = map (r: "${r}/${path}") remoteList;
       });
     in ''
       mkdir -p "$(dirname ${path})"
@@ -70,41 +70,17 @@ let
   transMetas = tinfo: concatLists (map (info: info.metas) tinfo);
   transRemotes = foldl' (acc: info: acc // info.remotes) {};
 
-  #getRemotes = { src, maven, settings ? settings' }:
-  #  importJSON (stdenv.mkDerivation {
-  #    inherit src;
-  #    name = "remotes.json";
-  #    phases = [ "unpackPhase" "installPhase" ];
-  #    installPhase = ''
-  #      parse() {
-  #        local sep=""
-  #        echo "{"
-  #        while test "$1"; do
-  #          echo "$sep\"$1\":\"$2\""
-  #          sep=","
-  #          shift 2
-  #        done
-  #        echo "}"
-  #      }
-  #      parse $(
-  #        ${maven}/bin/mvn 2>&- -B -nsu --offline --settings "${settings}" \
-  #          dependency:list-repositories \
-  #        | sed -n 's/.* \(id\|url\)://p' | tr -d '\n'
-  #      ) > $out
-  #    '';
-  #  });
-
   mkRepo = {
     deps ? [],
     metas ? [],
     remotes ? {},
     drvs ? [],
     drvsInfo ? [],
-  }:
-    let
-      deps' = deps ++ (transDeps drvsInfo);
-      metas' = metas ++ (transMetas drvsInfo);
-      remotes' = (transRemotes drvsInfo) // remotes;
+  }: let
+    deps' = deps ++ (transDeps drvsInfo);
+    metas' = metas ++ (transMetas drvsInfo);
+    remotes' = (transRemotes drvsInfo) // remotes;
+    remoteList = attrValues remotes';
   in runCommand "mk-repo" {} ''
     set -e
 
@@ -142,7 +118,7 @@ let
 
     mkdir -p "$out"
     (cd $out
-      ${concatStrings (map (urlToScript remotes') deps')}
+      ${concatStrings (map (urlToScript remoteList) deps')}
       ${concatStrings (mapmap
         (map metadataToScript (attrNames remotes')) metas')}
       ${concatStrings (map drvToScript drvs)}
@@ -184,8 +160,6 @@ let
     maven       ? maven',
     buildInputs ? [],
 
-    # TODO: replace `remotes` default value with output from:
-    # `getRemotes { inherit src maven settings; }`
     remotes     ? {},
 
     doCheck     ? true,
