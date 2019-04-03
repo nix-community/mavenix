@@ -54,7 +54,7 @@ let
       #
       #maven = maven.override { jdk = pkgs.oraclejdk10; };
 
-      # Override repmte repository URLs and settings.xml
+      # Override remote repository URLs and settings.xml
       #
       #remotes = { central = "https://repo.maven.apache.org/maven2"; };
       #settings = ./settings.xml;
