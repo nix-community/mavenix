@@ -9,7 +9,7 @@ usage() {
   Options:
     -S, --src                A Nix expression to use as 'src' for derivation
     -o, --output <dir>       Output directory for generated files
-    -c, --copy-src           Include mavenix.nix
+    -s, --standalone         Include 'mavenix.nix' file
     -f, --force              Overwrite output file if exists
     -v, --verbose            Verbose output
     -h, --help               Print usage
@@ -29,7 +29,7 @@ while test "$1";do
   case "$1" in
     -S|--src) shift;srcExpr="$1";;
     -o|--output) shift;outputDir="$1";;
-    -c|--copy-src) copy_src=1;;
+    -s|--standalone) standalone=1;;
     -f|--force) forceOverwrite=1;;
     -v|--verbose) set -x;;
     -h|--help) usage;;
@@ -50,8 +50,8 @@ echo >&2 "
   Creating files:
 "
 
-if test "$copy_src"; then
-  relEnv="./$(realpath --relative-to="$(dirname $config)" "$outputDir/mavenix.nix")"
+if test "$standalone"; then
+  relEnv="./$(realpath --relative-to="$(dirname "$config")" "$outputDir/mavenix.nix")"
   copy "$MAVENIX_SCRIPT" "$outputDir/mavenix.nix"
   chmod u+w "$outputDir/mavenix.nix"
 else
