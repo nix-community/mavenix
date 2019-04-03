@@ -16,7 +16,7 @@ let
     in {
       pkgs ? (import mavenix-src {}).pkgs,
       mavenix ? import mavenix-src { inherit pkgs; },
-      src ? ./%%src%%,
+      src ? %%src%%,
       doCheck ? false,
     }: mavenix.buildMaven {
       inherit src doCheck;
