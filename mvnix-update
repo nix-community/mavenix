@@ -2,7 +2,8 @@
 set -e
 
 usage() {
-  test "$1" && echo -e Error: $1\\n || true
+  # shellcheck disable=SC2015
+  test "$1" && echo -e Error: "$1"\\n || true
   cat >&2 <<EOF
   Usage: mvnix-update [OPTIONS] [<NIX-FILE>]
 
@@ -22,9 +23,9 @@ EOF
 }
 
 # Setup work dir and cleanup
-WORK_DIR="$(mktemp -d --tmpdir mvnix-update.XXXXXX)"
+WORK_DIR=$(mktemp -d --tmpdir mvnix-update.XXXXXX)
 cleanup() { rm -rf "$WORK_DIR" || true; }
-trap "trap - TERM; cleanup; kill -- $$" EXIT INT TERM
+trap 'trap - TERM; cleanup; kill -- $$' EXIT INT TERM
 
 # Default values
 expression="import ./. {}"
@@ -52,7 +53,7 @@ elif [[ "$config" ]]; then
   expression="import \"$(realpath "$config")\" {}"
 fi
 
-tmp_repo="$(realpath "$tmp_repo")"
+tmp_repo=$(realpath "$tmp_repo")
 mkdir -p "$tmp_repo"
 
 ns_() {
@@ -64,16 +65,16 @@ ns_() {
 echo >&2 "
   Getting mavenix meta data...
 "
-mavenixMeta="$(ns_ . echo '$mavenixMeta')"
+mavenixMeta=$(ns_ . echo \$mavenixMeta)
 mq() { jq -rc "$1" <<<"$mavenixMeta"; }
 
 test "$mavenixMeta" || die "Nix expression is not a mavenix derivation"
 
-cp -rf $(mq .emptyRepo)/* "$tmp_repo" >/dev/null 2>&1 || true
+cp -rf "$(mq .emptyRepo)"/* "$tmp_repo" >/dev/null 2>&1 || true
 chmod -R u+w "$tmp_repo" || true #echo >&2 Failed to set chmod on temp repo dir.
 
-settings="$(mq .settings)"
-src_path="$(mq .srcPath)"
+settings=$(mq .settings)
+src_path=$(mq .srcPath)
 src_wd="$src_path"
 if test ! -w "$src_wd"; then
   src_wd="$WORK_DIR/src"
@@ -81,7 +82,9 @@ if test ! -w "$src_wd"; then
   chmod -R u+w "$src_wd" || true #echo >&2 Failed to set chmod on temp repo dir.
 fi
 
-mvn_flags="$(test "$verbose" && printf %s "-e -X" || true)"
+# shellcheck disable=SC2015
+mvn_flags=$(test "$verbose" && printf %s "-e -X" || true)
+# shellcheck disable=SC2086
 mvn_() { ns_ "$src_wd" mvn $mvn_flags -B -nsu --settings "$settings" "$@"; }
 mvn_out() { ns_ "$src_wd" mvn -B -nsu --settings "$settings" "$@"; }
 
@@ -93,31 +96,31 @@ mvn_ >&2 package -Dmaven.test.skip.exec=true -DskipTests -Dmaven.repo.local="$tm
 echo >&2 "
   Getting project info...
 "
-pom="$(mvn_out help:effective-pom | grep -v '^\[\|^Effective \|^$' | xq -c .)"
-projects="$(jq -c '.projects.project // [.project]' <<<"$pom")"
+pom=$(mvn_out help:effective-pom | grep -v '^\[\|^Effective \|^$' | xq -c .)
+projects=$(jq -c '.projects.project // [.project]' <<<"$pom")
 pq() { jq -rc "$1" <<<"$projects"; }
 export -f pq
 
-groupId="$(pq .[0].groupId)"
-artifactId="$(pq .[0].artifactId)"
-version="$(pq .[0].version)"
+groupId=$(pq .[0].groupId)
+artifactId=$(pq .[0].artifactId)
+version=$(pq .[0].version)
 
-modules="$(pq '
+modules=$(pq '
   [ .[]
     | {
       name: (.artifactId + "-" + .version),
       groupId, artifactId, version,
-      path: (.build.directory | sub("^'$src_wd'/"; "./") | sub("/target"; ""))
+      path: (.build.directory | sub("^'"$src_wd"'/"; "./") | sub("/target"; ""))
     }
   ]
-')"
+')
 
-remotes_repos="$(pq '
+remotes_repos=$(pq '
   [ [.[].repositories.repository, .[].pluginRepositories.pluginRepository]
     | flatten | .[]
     | {(.id):.url}
   ] | add
-')"
+')
 
 tmp_lock_file="$WORK_DIR/tmp-mavenix.lock"
 lock_file="$(mq .infoFile)"
@@ -138,21 +141,22 @@ echo -n "{
   \"version\": \"$version\",
   \"submodules\": $modules,
   \"deps\": [ $(mq .deps[] | sed 's/\(.\)$/\1,/')"
-( cd $tmp_repo
-remotes="$(find . -type f -name "*.repositories" | sed 's|^\./||' | sort)"
+( cd "$tmp_repo"
+remotes=$(find . -type f -name "*.repositories" | sed 's|^\./||' | sort)
 sep=""
 for remote in $remotes; do
-  dir="$(dirname "$remote")"
-  files="$(find "$dir" -type f ! -name "*.repositories" ! -name "*.sha1" \
-    | grep -v '^#' "$remote" | sed "s|^|$dir/|")"
+  dir=$(dirname "$remote")
+  files=$(find "$dir" -type f ! -name "*.repositories" ! -name "*.sha1" \
+    | grep -v '^#' "$remote" | sed "s|^|$dir/|")
   for file_ in $files; do
-    file=$(echo $file_ | cut -d '>' -f1)
+    file=$(echo "$file_" | cut -d '>' -f1)
     # Maven 3.0.5 for 3.3.9 use $file instead of $file_real
-    file_real=$(echo $(echo $file | sed 's/-SNAPSHOT\./-[0-9]*\./'))
-    repo=$(echo $file_ | cut -d '>' -f2 | sed 's/=$//')
+    # shellcheck disable=SC2116,SC2086
+    file_real=$(echo ${file//-SNAPSHOT./-[0-9]*.})
+    repo=$(echo "$file_" | cut -d '>' -f2 | sed 's/=$//')
     test "$repo" || continue
     echo -n "$sep
-    {\"path\":\"$file_real\",\"sha1\":\"$(grep -Eo '[0-9a-zA-Z]{40}' < $file_real.sha1)\"}"
+    {\"path\":\"$file_real\",\"sha1\":\"$(grep -Eo '[0-9a-zA-Z]{40}' < "$file_real.sha1")\"}"
     sep=","
 
     test "$no_add" || nix-store --add-fixed sha1 "$file_real" >&2
@@ -162,14 +166,14 @@ done
 echo -n "
   ],
   \"metas\": ["
-metafiles="$(find . -type f -name "maven-metadata-*.xml"  | sed 's|^\./||' | sort)"
+metafiles=$(find . -type f -name "maven-metadata-*.xml"  | sed 's|^\./||' | sort)
 sep=""
 for file in $metafiles; do
-  repo=$(basename $file | sed 's/^maven-metadata-//;s/\.xml$//')
+  repo=$(basename "$file" | sed 's/^maven-metadata-//;s/\.xml$//')
   [[ "$repo" && "$repo" != "local"  ]] || continue
   echo -n "$sep{
-      \"path\": \"$(dirname $file)\",
-      \"content\": \"$(sed ':a;N;$!ba;s/\n/\\n/g;s/\"/\\\"/g' $file)\"
+      \"path\": \"$(dirname "$file")\",
+      \"content\": \"$(sed ':a;N;$!ba;s/\n/\\n/g;s/\"/\\\"/g' "$file")\"
     }"
   sep=", "
 done

@@ -2,7 +2,8 @@
 set -e
 
 usage() {
-  test "$1" && echo -e Error: $1\\n || true
+  # shellcheck disable=SC2015
+  test "$1" && echo -e Error: "$1"\\n || true
   cat >&2 <<EOF
   Usage: mvnix-init [OPTIONS] [<NIX-FILE>]
 
@@ -58,6 +59,7 @@ else
   relEnv="fetchTarball { url = \"$MAVENIX_DOWNLOAD\"; sha256 = \"$(nix-prefetch-url "$MAVENIX_DOWNLOAD" --unpack 2>&-)\"; }"
 fi
 
+# shellcheck disable=SC2002
 copy <(cat "$CONFIG_TEMPLATE" \
 | tmpl src "$srcExpr" \
 | tmpl env "$relEnv" \
