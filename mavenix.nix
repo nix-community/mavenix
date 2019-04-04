@@ -171,7 +171,7 @@ let
       dummy-info = { name = "update"; deps = []; metas = []; };
 
       config = config' // {
-        buildInputs = buildInputs ++ [ maven' ];
+        buildInputs = buildInputs ++ [ maven' maven.jdk ];
       };
       info = if build then importJSON infoFile else dummy-info;
       remotes' = (optionalAttrs (info?remotes) info.remotes) // remotes;
