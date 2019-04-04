@@ -17,7 +17,7 @@ let
   inherit (pkgs) stdenv runCommand fetchurl makeWrapper maven writeText
     requireFile yq;
   inherit (pkgs.lib) concatLists concatStrings importJSON strings
-    makeOverridable optionalAttrs optionalString;
+    optionalAttrs optionalString;
 
   maven' = maven;
   settings' = writeText "settings.xml" ''

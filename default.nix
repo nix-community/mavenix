@@ -52,7 +52,7 @@ let
 
       # Override which maven package to build with
       #
-      #maven = maven.override { jdk = pkgs.oraclejdk10; };
+      #maven = maven.overrideAttrs (_: { jdk = pkgs.oraclejdk10; });
 
       # Override remote repository URLs and settings.xml
       #
