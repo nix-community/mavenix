@@ -17,7 +17,7 @@ let
   inherit (pkgs) stdenv runCommand fetchurl makeWrapper maven writeText
     requireFile yq;
   inherit (pkgs.lib) concatLists concatStrings importJSON strings
-    makeOverridable optionalAttrs optionalString;
+    optionalAttrs optionalString;
 
   maven' = maven;
   settings' = writeText "settings.xml" ''
@@ -151,7 +151,11 @@ let
     ' > $dir/${submod.name}.metadata.xml
   '';
 
-  buildMaven = makeOverridable ({
+  overrideOverrideAttrs = f: attrs: (f attrs) // {
+    overrideAttrs = f_: overrideOverrideAttrs f (attrs // (f_ attrs));
+  };
+
+  buildMaven = overrideOverrideAttrs ({
     src,
     infoFile,
     deps        ? [],
