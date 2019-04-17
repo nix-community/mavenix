@@ -87,7 +87,6 @@ in mavenix // {
       description = "Mavenix: deterministic builds for Maven using Nix?";
       license = licenses.unlicense;
       maintainers = [ { email = "me@icetan.org"; github = "icetan"; name = "Christopher Fredén"; } ];
-      platforms = [ "x86_64-linux" ];
     };
   };
 }
