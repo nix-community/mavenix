@@ -76,6 +76,7 @@ let
     remotes ? {},
     drvs ? [],
     drvsInfo ? [],
+    postHook ? "",
   }: let
     deps' = deps ++ (transDeps drvsInfo);
     metas' = metas ++ (transMetas drvsInfo);
@@ -123,6 +124,8 @@ let
         (map metadataToScript (attrNames remotes')) metas')}
       ${concatStrings (map drvToScript drvs)}
     )
+
+    ${postHook}
   '';
 
   cp-artifact = submod: ''
@@ -166,6 +169,8 @@ let
 
     remotes     ? {},
 
+    postMkRepoHook ? "",
+
     doCheck     ? true,
     debug       ? false,
     build       ? true,
@@ -190,6 +195,7 @@ let
         inherit (info) deps metas;
         inherit drvs drvsInfo;
         remotes = remotes';
+        postHook = postMkRepoHook;
       };
 
       # Wrap mvn with settings to improve the nix-shell experience
