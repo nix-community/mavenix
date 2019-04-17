@@ -60,10 +60,11 @@ else
 fi
 
 # shellcheck disable=SC2002
-copy <(cat "$CONFIG_TEMPLATE" \
+cat "$CONFIG_TEMPLATE" \
 | tmpl src "$srcExpr" \
 | tmpl env "$relEnv" \
-) "$config"
+> "$config"
+echo "$config"
 
 echo >&2 "
   1. Configure by editing '$config'
