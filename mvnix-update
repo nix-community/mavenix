@@ -91,7 +91,7 @@ mvn_out() { ns_ "$src_wd" mvn -B -nsu --settings "$settings" "$@"; }
 echo >&2 "
   Running mvn package...
 "
-mvn_ >&2 package -Dmaven.test.skip.exec=true -DskipTests -Dmaven.repo.local="$tmp_repo"
+mvn_ >&2 install -Dmaven.test.skip.exec=true -DskipTests -Dmaven.repo.local="$tmp_repo"
 
 echo >&2 "
   Getting project info...
