@@ -199,6 +199,7 @@ let
 
         nativeBuildInputs = [
           maven' maven.jdk
+          (pkgs.ensureNewerSourcesHook { year = "1980"; })
         ] ++ extraNativeBuildInputs;
 
         # Export as environment variable to make it possible to reuse default flags in other phases/hooks
