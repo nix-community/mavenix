@@ -28,7 +28,7 @@ outputDir="."
 # Parse CLI arguments
 while test "$1";do
   case "$1" in
-    -S|--src) shift;srcExpr="$1";;
+    -S|--src) shift;srcExpr="($1)";;
     -o|--output) shift;outputDir="$1";;
     -s|--standalone) standalone=1;;
     -f|--force) forceOverwrite=1;;
