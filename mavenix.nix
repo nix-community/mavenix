@@ -85,21 +85,21 @@ let
     set -e
 
     getMavenPath() {
-      local version="$(sed -n 's|^version=||p' "$1")"
-      local groupId="$(sed -n 's|^groupId=||p' "$1")"
-      local artifactId="$(sed -n 's|^artifactId=||p' "$1")"
-      echo "$(sed 's|\.|/|g' <<<"$groupId")/$artifactId/$version/$artifactId-$version"
+      local version=$(sed -n 's|^version=||p' "$1")
+      local groupId=$(sed -n 's|^groupId=||p' "$1")
+      local artifactId=$(sed -n 's|^artifactId=||p' "$1")
+      echo "''${groupId//.//}/$artifactId/$version/$artifactId-$version"
     }
 
     linkSnapshot() {
-      [ "$(${yq}/bin/xq '.metadata.versioning.snapshotVersions' < "$1")" == "null" ] \
+      [ "$(${yq}/bin/xq '.metadata.versioning.snapshotVersions' "$1")" == "null" ] \
         && return
-      cat "$1" | ${yq}/bin/xq -r '
+      ${yq}/bin/xq -r '
         .metadata as $o
           | [.metadata.versioning.snapshotVersions.snapshotVersion] | flatten | .[]
           | ((if .classifier? then ("-" + .classifier) else "" end) + "." + .extension) as $e
           | $o.artifactId + "-" + .value + $e + " " + $o.artifactId + "-" + $o.version + $e
-      ' | xargs -L1 ln -sfv
+      ' "$1" | xargs -L1 ln -sfv
     }
 
     getMavenPathFromProperties() {
