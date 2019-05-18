@@ -28,7 +28,6 @@ cleanup() { rm -rf "$WORK_DIR" || true; }
 trap 'trap - TERM; cleanup; kill -- $$' EXIT INT TERM
 
 # Default values
-expression="import ./. {}"
 tmp_repo="$WORK_DIR/m2-repo"
 
 # Parse CLI arguments
@@ -51,6 +50,8 @@ if [[ "$expression" && "$config" ]]; then
   die "Expression and file arguments are mutually exclusive"
 elif [[ "$config" ]]; then
   expression="import \"$(realpath "$config")\" {}"
+elif [[ ! "$expression" ]]; then
+  expression="import ./. {}"
 fi
 
 tmp_repo=$(realpath "$tmp_repo")
