@@ -155,7 +155,8 @@ let
     drvs        ? [],
     settings    ? settings',
     maven       ? maven',
-    buildInputs ? [],
+
+    extraNativeBuildInputs ? [],
 
     remotes     ? {},
 
@@ -163,13 +164,10 @@ let
     debug       ? false,
     build       ? true,
     ...
-  }@config':
+  }@config:
     let
       dummy-info = { name = "update"; deps = []; metas = []; };
 
-      config = config' // {
-        buildInputs = buildInputs ++ [ maven' maven.jdk ];
-      };
       info = if build then importJSON infoFile else dummy-info;
       remotes' = (optionalAttrs (info?remotes) info.remotes) // remotes;
       drvsInfo = transInfo drvs;
@@ -198,6 +196,10 @@ let
     in
       stdenv.mkDerivation ({
         name = info.name;
+
+        nativeBuildInputs = [
+          maven' maven.jdk
+        ] ++ extraNativeBuildInputs;
 
         # Export as environment variable to make it possible to reuse default flags in other phases/hooks
         inherit mvn;
