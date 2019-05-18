@@ -243,17 +243,18 @@ let
           echo copying lock file
           cp -v ${infoFile} $out/share/mavenix/mavenix.lock
         '';
-      } // (config // {
-        deps = null;
-        drvs = null;
-        remotes = null;
-        infoFile = null;
-        mavenixMeta = toJSON {
-          inherit deps emptyRepo settings;
-          infoFile = toString infoFile;
-          srcPath = toString src;
+
+        passthru = {
+          mavenixMeta = {
+            inherit deps emptyRepo settings;
+            infoFile = toString infoFile;
+            srcPath = toString src;
+          };
         };
-      }))
+      } // (
+        removeAttrs config
+          [ "deps" "drvs" "remotes" "infoFile" "extraNativeBuildInputs" ]
+      ))
   );
 in rec {
   version = "2.0.0";
