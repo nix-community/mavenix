@@ -8,7 +8,7 @@ First you need to install the [Nix package manager](https://nixos.org/nix/), if
 you already haven't.
 
 ```sh
-nix-env -i -f https://github.com/icetan/mavenix/archive/master.tar.gz
+nix-env -i -f https://github.com/icetan/mavenix/tarball/master
 ```
 
 ## Usage
@@ -52,6 +52,14 @@ E.g. generate and build a Nix package for Traccar v4.2:
 
 ```sh
 mvnix-init -S 'fetchGit { url = git://github.com/traccar/traccar.git; ref = "v4.2"; }'
+mvnix-update
+nix-build
+```
+
+Or a Spring Boot application:
+
+```sh
+mvnix-init -S 'fetchTarball https://github.com/Gerschtli/spring-rest-api/tarball/master'
 mvnix-update
 nix-build
 ```
