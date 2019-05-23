@@ -168,6 +168,7 @@ let
     doCheck     ? true,
     debug       ? false,
     build       ? true,
+    passthru    ? {},
     ...
   }@config:
     let
@@ -250,7 +251,7 @@ let
           cp -v ${infoFile} $out/share/mavenix/mavenix.lock
         '';
 
-        passthru = {
+        passthru = passthru // {
           mavenixMeta = {
             inherit deps emptyRepo settings;
             infoFile = toString infoFile;
@@ -258,8 +259,10 @@ let
           };
         };
       } // (
-        removeAttrs config
-          [ "deps" "drvs" "remotes" "infoFile" "extraNativeBuildInputs" ]
+        removeAttrs config [
+          "deps" "drvs" "remotes" "infoFile" "extraNativeBuildInputs"
+          "passthru"
+        ]
       ))
   );
 in rec {
