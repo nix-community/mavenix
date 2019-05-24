@@ -159,7 +159,8 @@ let
     settings    ? settings',
     maven       ? maven',
 
-    extraNativeBuildInputs ? [],
+    nativeBuildInputs ? [],
+    passthru    ? {},
 
     remotes     ? {},
 
@@ -168,7 +169,6 @@ let
     doCheck     ? true,
     debug       ? false,
     build       ? true,
-    passthru    ? {},
     ...
   }@config:
     let
@@ -204,10 +204,10 @@ let
       stdenv.mkDerivation ({
         name = info.name;
 
-        nativeBuildInputs = [
+        nativeBuildInputs = nativeBuildInputs ++ [
           maven' maven.jdk
           (pkgs.ensureNewerSourcesHook { year = "1980"; })
-        ] ++ extraNativeBuildInputs;
+        ];
 
         # Export as environment variable to make it possible to reuse default flags in other phases/hooks
         inherit mvn;
@@ -260,8 +260,8 @@ let
         };
       } // (
         removeAttrs config [
-          "deps" "drvs" "remotes" "infoFile" "extraNativeBuildInputs"
-          "passthru"
+          "deps" "drvs" "remotes" "infoFile"
+          "nativeBuildInputs" "passthru"
         ]
       ))
   );
