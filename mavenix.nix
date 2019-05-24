@@ -266,7 +266,7 @@ let
       ))
   );
 in rec {
-  version = "2.2.0";
+  version = "2.2.1";
   name = "mavenix-${version}";
   updateInfo = f: infoFile:
     writeText "updated-lock" (
