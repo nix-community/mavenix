@@ -1,7 +1,8 @@
 {
-  pkgs ? import (fetchTarball {
-    url = "https://github.com/NixOS/nixpkgs/tarball/18.09";
-    sha256  = "1ib96has10v5nr6bzf7v8kw7yzww8zanxgw2qi1ll1sbv6kj6zpd";
+  pkgs ? import (fetchGit {
+    url = "https://github.com/NixOS/nixpkgs-channels";
+    ref = "nixos-19.09";
+    rev = "c75de8bc12cc7e713206199e5ca30b224e295041";
   }) {},
 }:
 
