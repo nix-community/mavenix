@@ -227,7 +227,7 @@ let
           runHook preBuild
 
           $mvn --version
-          $mvn package -DskipTests=true -Dmaven.test.skip=true
+          $mvn package -DskipTests=true -Dmaven.test.skip.exec=true
 
           runHook postBuild
         '';
