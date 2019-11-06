@@ -197,8 +197,8 @@ echo -n "
 echo >&2 "
   Sanity check...
 "
-jq -c . < "$tmp_lock_file" > /dev/null
-mv "$tmp_lock_file" "$lock_file"
+jq -c . "$tmp_lock_file" > /dev/null
+jq -S . "$tmp_lock_file" > "$lock_file"
 
 echo >&2 "
   Lock file created at: $lock_file
