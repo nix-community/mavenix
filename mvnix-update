@@ -24,8 +24,8 @@ EOF
 
 # Setup work dir and cleanup
 WORK_DIR=$(mktemp -d --tmpdir mvnix-update.XXXXXX)
-cleanup() { rm -rf "$WORK_DIR" || true; }
-trap 'trap - TERM; cleanup; kill -- $$' EXIT INT TERM
+cleanup() { { chmod -R +w "$WORK_DIR"; rm -rf "$WORK_DIR"; } || true; }
+trap 'trap - EXIT; cleanup; kill -- $$' EXIT
 
 # Default values
 tmp_repo="$WORK_DIR/m2-repo"
@@ -46,6 +46,8 @@ done
 
 die() { echo >&2 "$@"; exit 1;}
 
+nix_flags=$(test "$verbose" && printf %s "--verbose" || true)
+
 if [[ "$expression" && "$config" ]]; then
   die "Expression and file arguments are mutually exclusive"
 elif [[ "$config" ]]; then
@@ -59,20 +61,25 @@ mkdir -p "$tmp_repo"
 
 ns_() {
   local ns_wd="$1";shift
-  HOME="/tmp/nowhere" nix-shell --show-trace --pure \
+  HOME="/tmp/nowhere" nix-shell $nix_flags --show-trace --pure \
     --run "cd \"$ns_wd\"; $*" -E "($expression).overrideAttrs (_: { build = false; })";
 }
 
 echo >&2 "
   Getting mavenix meta data...
 "
-mavenixMeta=$(nix-instantiate --eval --strict --json -E "($expression).mavenixMeta")
+nix-build $nix_flags --no-out-link -E "($expression).src" >/dev/null
+nix-build $nix_flags --no-out-link -E "($expression).mavenixMeta" >/dev/null
+mavenixMeta=$(nix-instantiate $nix_flags --eval --strict --json -E "($expression).mavenixMeta")
 mq() { jq -rc "$1" <<<"$mavenixMeta"; }
 
 test "$mavenixMeta" || die "Nix expression is not a mavenix derivation"
 
-cp -rf "$(mq .emptyRepo)"/* "$tmp_repo" >/dev/null 2>&1 || true
-chmod -R u+w "$tmp_repo" || true #echo >&2 Failed to set chmod on temp repo dir.
+empty_repo=$(mq .emptyRepo)
+if test -d "$empty_repo"; then
+  cp -rf -t "$tmp_repo" "$empty_repo"/* >/dev/null 2>&1 || true
+  chmod -R u+w "$tmp_repo" || true
+fi
 
 settings=$(mq .settings)
 src_path=$(mq .srcPath)
@@ -190,8 +197,8 @@ echo -n "
 echo >&2 "
   Sanity check...
 "
-jq -c . < "$tmp_lock_file" > /dev/null
-mv "$tmp_lock_file" "$lock_file"
+jq -c . "$tmp_lock_file" > /dev/null
+jq -S . "$tmp_lock_file" > "$lock_file"
 
 echo >&2 "
   Lock file created at: $lock_file
