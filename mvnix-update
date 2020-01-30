@@ -68,21 +68,32 @@ ns_() {
 echo >&2 "
   Getting mavenix meta data...
 "
-nix-build $nix_flags --no-out-link -E "($expression).src" >/dev/null
-nix-build $nix_flags --no-out-link -E "($expression).mavenixMeta" >/dev/null
-mavenixMeta=$(nix-instantiate $nix_flags --eval --strict --json -E "($expression).mavenixMeta")
+
+realiseStorePath() {
+  # Check if $1 is a store path (similar to lib.isStorePath) and realize only
+  # if it is.
+  if [[ $1 =~ ^/nix/store/ ]]; then
+    nix-store --realise "$1" >/dev/null
+  fi
+}
+mavenixMeta=$(nix-instantiate $nix_flags --eval --strict --json -E "($expression).mavenixMeta" | jq -rc .)
 mq() { jq -rc "$1" <<<"$mavenixMeta"; }
 
 test "$mavenixMeta" || die "Nix expression is not a mavenix derivation"
 
+nix-build --no-out-link -E "{ inherit (($expression).mavenixMeta) emptyRepo settings infoFile; }"
+
+src_path=$(mq .srcPath)
+realiseStorePath "$src_path"
+
+settings=$(mq .settings)
 empty_repo=$(mq .emptyRepo)
+
 if test -d "$empty_repo"; then
   cp -rf -t "$tmp_repo" "$empty_repo"/* >/dev/null 2>&1 || true
   chmod -R u+w "$tmp_repo" || true
 fi
 
-settings=$(mq .settings)
-src_path=$(mq .srcPath)
 src_wd="$src_path"
 if test ! -w "$src_wd"; then
   src_wd="$WORK_DIR/src"
