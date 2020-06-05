@@ -175,7 +175,7 @@ let
     let
       dummy-info = { name = "update"; deps = []; metas = []; };
 
-      info = if build then importJSON infoFile else dummy-info;
+      info = if (build && pathExists infoFile) then importJSON infoFile else dummy-info;
       remotes' = (optionalAttrs (info?remotes) info.remotes) // remotes;
       drvsInfo = transInfo drvs;
 
