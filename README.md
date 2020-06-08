@@ -8,7 +8,7 @@ First you need to install the [Nix package manager](https://nixos.org/nix/), if
 you already haven't.
 
 ```sh
-nix-env -i -f https://github.com/icetan/mavenix/tarball/master
+nix-env -i -f https://github.com/nix-community/mavenix/tarball/master
 ```
 
 ## Usage
