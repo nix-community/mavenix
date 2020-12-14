@@ -51,7 +51,7 @@ manually clone the target project repository.
 E.g. generate and build a Nix package for Traccar v4.2:
 
 ```sh
-mvnix-init -S 'fetchGit { url = git://github.com/traccar/traccar.git; ref = "v4.2"; }'
+mvnix-init -S 'fetchTarball "http://github.com/traccar/traccar/tarball/v4.2"'
 mvnix-update
 nix-build
 ```
