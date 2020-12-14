@@ -166,7 +166,7 @@ sep=""
 for remote in $remotes; do
   dir=$(dirname "$remote")
   files=$(find "$dir" -type f ! -name "*.repositories" ! -name "*.sha1" \
-    | grep -v '^#' "$remote" | sed "s|^|$dir/|")
+    | grep -v '^#' "$remote" | sed "s|^|$dir/|" | sort)
   for file_ in $files; do
     file=$(echo "$file_" | cut -d '>' -f1)
     # Maven 3.0.5 for 3.3.9 use $file instead of $file_real
