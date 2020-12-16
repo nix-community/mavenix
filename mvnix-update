@@ -161,12 +161,12 @@ echo -n "{
   \"submodules\": $modules,
   \"deps\": [ $(mq .deps[] | sed 's/\(.\)$/\1,/')"
 ( cd "$tmp_repo"
-remotes=$(find . -type f -name "*.repositories" | sed 's|^\./||' | sort)
+remotes=$(find . -type f -name "*.repositories" | sed 's|^\./||' | env LC_ALL=C sort)
 sep=""
 for remote in $remotes; do
   dir=$(dirname "$remote")
   files=$(find "$dir" -type f ! -name "*.repositories" ! -name "*.sha1" \
-    | grep -v '^#' "$remote" | sed "s|^|$dir/|" | sort)
+    | grep -v '^#' "$remote" | sed "s|^|$dir/|" | env LC_ALL=C sort)
   for file_ in $files; do
     file=$(echo "$file_" | cut -d '>' -f1)
     # Maven 3.0.5 for 3.3.9 use $file instead of $file_real
@@ -185,7 +185,7 @@ done
 echo -n "
   ],
   \"metas\": ["
-metafiles=$(find . -type f -name "maven-metadata-*.xml"  | sed 's|^\./||' | sort)
+metafiles=$(find . -type f -name "maven-metadata-*.xml"  | sed 's|^\./||' | env LC_ALL=C sort)
 sep=""
 for file in $metafiles; do
   repo=$(basename "$file" | sed 's/^maven-metadata-//;s/\.xml$//')
