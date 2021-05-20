@@ -1,4 +1,4 @@
-self: super:
+final: prev:
 let
   mavenix = import ./. {};
 in {
